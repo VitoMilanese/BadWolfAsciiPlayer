@@ -49,7 +49,7 @@ Then either:
 
 When text is selected in **Selectable text** mode, the displayed text is temporarily kept stable so the selection is not lost while playback continues.
 
-Edge enhancement is calculated before the final ASCII downsampling. FFmpeg supplies a 3x denser RGB frame, the renderer applies a small Gaussian blur, computes a Sobel edge map, and then aggregates coherent contour information into each ASCII cell. Random high-frequency texture is suppressed by gradient-direction coherence, while real object boundaries slightly increase glyph density and brightness instead of being replaced by directional slash characters.
+Edge enhancement is calculated before the final ASCII downsampling. FFmpeg supplies a 3x denser RGB frame, the renderer applies a small Gaussian blur, computes a Sobel edge map, and then aggregates coherent contour information into each ASCII cell. Directionally inconsistent texture is suppressed, while stable object boundaries slightly increase glyph density and brightness instead of being replaced by directional slash characters.
 
 ## How it works
 
