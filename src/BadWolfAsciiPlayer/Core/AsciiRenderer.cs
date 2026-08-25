@@ -1,3 +1,4 @@
+using System.Text;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -9,8 +10,6 @@ public sealed class AsciiRenderer
     public const int CellWidth = 6;
     public const int CellHeight = 10;
 
-    // Ordered from the least to the most ink coverage.  Starting with a dot
-    // instead of a space keeps dark-but-visible picture detail from vanishing.
     private const string Ramp = ".:-=+*#%@";
     private const double TargetGlyphCoverage = 0.58;
 
@@ -48,6 +47,27 @@ public sealed class AsciiRenderer
         return _bitmap;
     }
 
+    public string RenderText(byte[] rgb, int columns, int rows)
+    {
+        if (rgb.Length < columns * rows * 3)
+            return string.Empty;
+
+        var builder = new StringBuilder((columns + Environment.NewLine.Length) * rows);
+        for (int y = 0; y < rows; y++)
+        {
+            for (int x = 0; x < columns; x++)
+            {
+                int source = (y * columns + x) * 3;
+                builder.Append(GetGlyph(rgb[source], rgb[source + 1], rgb[source + 2]));
+            }
+
+            if (y < rows - 1)
+                builder.AppendLine();
+        }
+
+        return builder.ToString();
+    }
+
     public unsafe void Render(byte[] rgb, int columns, int rows, AsciiMode mode)
     {
         WriteableBitmap bitmap = EnsureBitmap(columns, rows);
@@ -72,17 +92,9 @@ public sealed class AsciiRenderer
                     byte g = rgb[source + 1];
                     byte b = rgb[source + 2];
 
-                    double sourceLuminance = (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255.0;
-
-                    // Human vision and display gamma make a direct linear mapping look much
-                    // darker when only a fraction of each ASCII cell contains foreground ink.
-                    // Lift mid-tones before selecting the glyph, then compensate the foreground
-                    // intensity for that glyph's measured ink coverage.
+                    double sourceLuminance = GetSourceLuminance(r, g, b);
                     double displayLuminance = Math.Pow(sourceLuminance, 0.72);
-                    int rampIndex = (int)Math.Round(displayLuminance * (Ramp.Length - 1));
-                    rampIndex = Math.Clamp(rampIndex, 0, Ramp.Length - 1);
-
-                    char glyph = Ramp[rampIndex];
+                    char glyph = GetGlyphFromDisplayLuminance(displayLuminance);
                     byte[] mask = _glyphMasks[glyph];
                     double coverage = _glyphCoverage[glyph];
                     double coverageGain = Math.Clamp(TargetGlyphCoverage / coverage, 1.0, 3.2);
@@ -100,9 +112,6 @@ public sealed class AsciiRenderer
                     }
                     else
                     {
-                        // Preserve hue while recovering the luminance lost to the black area
-                        // surrounding each glyph.  A small floor keeps saturated dark colours
-                        // visible without turning true blacks grey.
                         double colorGain = sourceLuminance < 0.015 ? 1.0 : brightnessGain;
                         fgR = ToByte(r * colorGain);
                         fgG = ToByte(g * colorGain);
@@ -136,6 +145,22 @@ public sealed class AsciiRenderer
             bitmap.Unlock();
         }
     }
+
+    private static char GetGlyph(byte r, byte g, byte b)
+    {
+        double displayLuminance = Math.Pow(GetSourceLuminance(r, g, b), 0.72);
+        return GetGlyphFromDisplayLuminance(displayLuminance);
+    }
+
+    private static char GetGlyphFromDisplayLuminance(double displayLuminance)
+    {
+        int rampIndex = (int)Math.Round(displayLuminance * (Ramp.Length - 1));
+        rampIndex = Math.Clamp(rampIndex, 0, Ramp.Length - 1);
+        return Ramp[rampIndex];
+    }
+
+    private static double GetSourceLuminance(byte r, byte g, byte b) =>
+        (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255.0;
 
     private static byte ToByte(double value) => (byte)Math.Clamp((int)Math.Round(value), 0, 255);
 

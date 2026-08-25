@@ -29,9 +29,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBoxItem">
-                        <Border x:Name="ItemBorder"
-                                Background="{TemplateBinding Background}"
-                                Padding="{TemplateBinding Padding}">
+                        <Border x:Name="ItemBorder" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
                             <ContentPresenter VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -61,138 +59,72 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBox">
                         <Grid>
-                            <Border x:Name="OuterBorder"
-                                    Background="{TemplateBinding Background}"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="2">
+                            <Border x:Name="OuterBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="2">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="28"/>
                                     </Grid.ColumnDefinitions>
-                                    <ContentPresenter Grid.Column="0"
-                                                      Margin="{TemplateBinding Padding}"
-                                                      VerticalAlignment="Center"
-                                                      HorizontalAlignment="Left"
-                                                      Content="{TemplateBinding SelectionBoxItem}"
-                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                                      ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
-                                                      IsHitTestVisible="False"/>
+                                    <ContentPresenter Grid.Column="0" Margin="{TemplateBinding Padding}" VerticalAlignment="Center" HorizontalAlignment="Left" Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" IsHitTestVisible="False"/>
                                     <Border Grid.Column="1" BorderBrush="#444444" BorderThickness="1,0,0,0">
-                                        <Path Width="8" Height="5"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              Fill="#D8D8D8"
-                                              Data="M 0 0 L 8 0 L 4 5 Z"/>
+                                        <Path Width="8" Height="5" HorizontalAlignment="Center" VerticalAlignment="Center" Fill="#D8D8D8" Data="M 0 0 L 8 0 L 4 5 Z"/>
                                     </Border>
                                 </Grid>
                             </Border>
-                            <ToggleButton Background="Transparent"
-                                          BorderThickness="0"
-                                          Focusable="False"
-                                          ClickMode="Press"
-                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"/>
-                            <Popup x:Name="PART_Popup"
-                                   Placement="Bottom"
-                                   AllowsTransparency="True"
-                                   Focusable="False"
-                                   IsOpen="{TemplateBinding IsDropDownOpen}"
-                                   PopupAnimation="Fade">
-                                <Border Margin="0,2,0,0"
-                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
-                                        MaxHeight="260"
-                                        Background="#262626"
-                                        BorderBrush="#555555"
-                                        BorderThickness="1"
-                                        CornerRadius="2">
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                                  HorizontalScrollBarVisibility="Disabled">
+                            <ToggleButton Background="Transparent" BorderThickness="0" Focusable="False" ClickMode="Press" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"/>
+                            <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True" Focusable="False" IsOpen="{TemplateBinding IsDropDownOpen}" PopupAnimation="Fade">
+                                <Border Margin="0,2,0,0" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="260" Background="#262626" BorderBrush="#555555" BorderThickness="1" CornerRadius="2">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                         <StackPanel IsItemsHost="True"/>
                                     </ScrollViewer>
                                 </Border>
                             </Popup>
                         </Grid>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="OuterBorder" Property="BorderBrush" Value="#777777"/>
-                            </Trigger>
-                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                <Setter TargetName="OuterBorder" Property="BorderBrush" Value="#8A8A8A"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Foreground" Value="#777777"/>
-                                <Setter TargetName="OuterBorder" Property="Background" Value="#1B1B1B"/>
-                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="OuterBorder" Property="BorderBrush" Value="#777777"/></Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="OuterBorder" Property="BorderBrush" Value="#8A8A8A"/></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="#777777"/><Setter TargetName="OuterBorder" Property="Background" Value="#1B1B1B"/></Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
-
-        <Style TargetType="Slider">
-            <Setter Property="Margin" Value="6,0"/>
-        </Style>
+        <Style TargetType="Slider"><Setter Property="Margin" Value="6,0"/></Style>
     </Window.Resources>
 
     <Grid Margin="12">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
-
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <DockPanel Grid.Row="0" Margin="0,0,0,10">
             <Button DockPanel.Dock="Left" Click="Open_Click">Open video</Button>
             <TextBlock x:Name="FileNameText" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#BEBEBE" Text="Drop an MP4/MKV/AVI/MOV here, or click Open video"/>
             <TextBlock x:Name="StatusText" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="#E17878" Margin="12,0,0,0"/>
         </DockPanel>
-
-        <Border Grid.Row="1" BorderBrush="#333333" BorderThickness="1" Background="Black" CornerRadius="4">
+        <Border Grid.Row="1" BorderBrush="#333333" BorderThickness="1" Background="Black" CornerRadius="4" ClipToBounds="True">
             <Grid>
                 <Image x:Name="AsciiImage" Stretch="Uniform" SnapsToDevicePixels="True" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                <Viewbox x:Name="SelectableAsciiView" Stretch="Uniform" Visibility="Collapsed" Margin="8">
+                    <TextBox x:Name="SelectableAsciiText" IsReadOnly="True" AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap" FontFamily="Consolas" FontSize="10" Background="Black" Foreground="#F2F2F2" BorderThickness="0" Padding="0" VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Disabled" ContextMenuService.ShowOnDisabled="True"/>
+                </Viewbox>
                 <TextBlock x:Name="DropHint" Text="DROP VIDEO HERE" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="32" FontWeight="SemiBold" Foreground="#3D3D3D" IsHitTestVisible="False"/>
             </Grid>
         </Border>
-
         <Grid Grid.Row="2" Margin="0,10,0,4">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <Button x:Name="PlayPauseButton" Grid.Column="0" Width="80" Click="PlayPause_Click" IsEnabled="False">Play</Button>
             <TextBlock x:Name="PositionText" Grid.Column="1" VerticalAlignment="Center" Margin="8,0" Text="00:00 / 00:00"/>
             <Slider x:Name="SeekSlider" Grid.Column="2" Minimum="0" Maximum="1" Value="0" IsEnabled="False" PreviewMouseDown="SeekSlider_PreviewMouseDown" PreviewMouseUp="SeekSlider_PreviewMouseUp"/>
-            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="Vol" VerticalAlignment="Center"/>
-                <Slider x:Name="VolumeSlider" Width="90" Minimum="0" Maximum="1" Value="0.8" ValueChanged="VolumeSlider_ValueChanged"/>
-            </StackPanel>
+            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="Vol" VerticalAlignment="Center"/><Slider x:Name="VolumeSlider" Width="90" Minimum="0" Maximum="1" Value="0.8" ValueChanged="VolumeSlider_ValueChanged"/></StackPanel>
         </Grid>
-
         <WrapPanel Grid.Row="3" HorizontalAlignment="Center" VerticalAlignment="Center">
-            <TextBlock Text="Mode" VerticalAlignment="Center" Margin="6,0,2,0"/>
-            <ComboBox x:Name="ModeCombo" Width="110" SelectionChanged="RenderSetting_Changed">
-                <ComboBoxItem Content="Color" IsSelected="True"/>
-                <ComboBoxItem Content="Mono"/>
-            </ComboBox>
+            <TextBlock Text="Display" VerticalAlignment="Center" Margin="6,0,2,0"/>
+            <ComboBox x:Name="DisplayCombo" Width="145" SelectionChanged="DisplayMode_Changed"><ComboBoxItem Content="Bitmap" IsSelected="True"/><ComboBoxItem Content="Selectable text"/></ComboBox>
+            <Button x:Name="CopyFrameButton" Click="CopyFrame_Click" IsEnabled="False" Padding="10,4">Copy frame</Button>
+            <TextBlock Text="Mode" VerticalAlignment="Center" Margin="12,0,2,0"/>
+            <ComboBox x:Name="ModeCombo" Width="110" SelectionChanged="RenderSetting_Changed"><ComboBoxItem Content="Color" IsSelected="True"/><ComboBoxItem Content="Mono"/></ComboBox>
             <TextBlock Text="Columns" VerticalAlignment="Center" Margin="12,0,2,0"/>
-            <ComboBox x:Name="ColumnsCombo" Width="90" SelectionChanged="RenderSetting_Changed">
-                <ComboBoxItem Content="80"/>
-                <ComboBoxItem Content="120"/>
-                <ComboBoxItem Content="160" IsSelected="True"/>
-                <ComboBoxItem Content="200"/>
-                <ComboBoxItem Content="240"/>
-            </ComboBox>
+            <ComboBox x:Name="ColumnsCombo" Width="90" SelectionChanged="RenderSetting_Changed"><ComboBoxItem Content="80"/><ComboBoxItem Content="120"/><ComboBoxItem Content="160" IsSelected="True"/><ComboBoxItem Content="200"/><ComboBoxItem Content="240"/></ComboBox>
             <TextBlock Text="FPS" VerticalAlignment="Center" Margin="12,0,2,0"/>
-            <ComboBox x:Name="FpsCombo" Width="80" SelectionChanged="RenderSetting_Changed">
-                <ComboBoxItem Content="15"/>
-                <ComboBoxItem Content="24"/>
-                <ComboBoxItem Content="30" IsSelected="True"/>
-                <ComboBoxItem Content="60"/>
-            </ComboBox>
+            <ComboBox x:Name="FpsCombo" Width="80" SelectionChanged="RenderSetting_Changed"><ComboBoxItem Content="15"/><ComboBoxItem Content="24"/><ComboBoxItem Content="30" IsSelected="True"/><ComboBoxItem Content="60"/></ComboBox>
         </WrapPanel>
     </Grid>
 </Window>

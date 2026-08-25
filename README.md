@@ -40,14 +40,23 @@ Then either:
 - Seek
 - Volume
 - Color or monochrome ASCII
+- Bitmap or selectable-text display mode
+- Select and copy ASCII characters directly with the mouse and `Ctrl+C`
+- **Copy frame** to copy the complete current frame as plain ASCII text
 - 80 / 120 / 160 / 200 / 240 columns
 - 15 / 24 / 30 / 60 ASCII FPS
 
+When text is selected in **Selectable text** mode, the displayed text is temporarily kept stable so the selection is not lost while playback continues.
+
 ## How it works
 
-Video path:
+Bitmap video path:
 
 `FFmpeg -> scaled RGB24 frames -> ASCII renderer -> WPF WriteableBitmap`
+
+Selectable-text video path:
+
+`FFmpeg -> scaled RGB24 frames -> luminance-to-glyph conversion -> read-only WPF TextBox`
 
 Audio path:
 
