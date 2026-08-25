@@ -34,7 +34,6 @@ public sealed class FfmpegFrameReader : IAsyncDisposable
             CreateNoWindow = true
         };
 
-        // Accurate enough for interactive seeking while avoiding full-resolution frame transfer.
         startInfo.ArgumentList.Add("-hide_banner");
         startInfo.ArgumentList.Add("-loglevel");
         startInfo.ArgumentList.Add("error");
@@ -46,7 +45,7 @@ public sealed class FfmpegFrameReader : IAsyncDisposable
         startInfo.ArgumentList.Add("-sn");
         startInfo.ArgumentList.Add("-dn");
         startInfo.ArgumentList.Add("-vf");
-        startInfo.ArgumentList.Add($"fps={fps},scale={width}:{height}:flags=fast_bilinear");
+        startInfo.ArgumentList.Add($"fps={fps},scale={width}:{height}:flags=bicubic");
         startInfo.ArgumentList.Add("-pix_fmt");
         startInfo.ArgumentList.Add("rgb24");
         startInfo.ArgumentList.Add("-f");
