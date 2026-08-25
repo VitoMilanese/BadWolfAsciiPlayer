@@ -55,11 +55,11 @@ Edge enhancement is calculated before the final ASCII downsampling. FFmpeg suppl
 
 Bitmap video path:
 
-`FFmpeg -> 3x RGB24 analysis frame -> Gaussian blur -> Sobel edge map -> ASCII cell aggregation -> WPF WriteableBitmap`
+`FFmpeg -> 3x RGB24 analysis frame -> Gaussian blur -> Sobel edge map -> coherent contour aggregation -> ASCII renderer -> WPF WriteableBitmap`
 
 Selectable-text video path:
 
-`FFmpeg -> 3x RGB24 analysis frame -> Gaussian blur -> Sobel edge map -> ASCII cell aggregation -> read-only WPF TextBox`
+`FFmpeg -> 3x RGB24 analysis frame -> Gaussian blur -> Sobel edge map -> coherent contour aggregation -> glyph conversion -> read-only WPF TextBox`
 
 Audio path:
 
