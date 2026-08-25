@@ -1,0 +1,8 @@
+.vs/
+**/bin/
+**/obj/
+*.user
+*.suo
+*.nupkg
+src/BadWolfAsciiPlayer/tools/ffmpeg.exe
+src/BadWolfAsciiPlayer/tools/ffprobe.exe
