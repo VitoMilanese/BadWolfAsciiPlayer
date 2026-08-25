@@ -35,25 +35,13 @@ public sealed class AsciiRenderer
         {
             _columns = columns;
             _rows = rows;
-            _bitmap = new WriteableBitmap(
-                columns * CellWidth,
-                rows * CellHeight,
-                96,
-                96,
-                PixelFormats.Bgra32,
-                null);
+            _bitmap = new WriteableBitmap(columns * CellWidth, rows * CellHeight, 96, 96, PixelFormats.Bgra32, null);
         }
 
         return _bitmap;
     }
 
-    public string RenderText(
-        byte[] rgb,
-        int sourceWidth,
-        int sourceHeight,
-        int columns,
-        int rows,
-        double edgeStrength = 0)
+    public string RenderText(byte[] rgb, int sourceWidth, int sourceHeight, int columns, int rows, double edgeStrength = 0)
     {
         FrameAnalysis analysis = AnalyzeFrame(rgb, sourceWidth, sourceHeight, columns, rows);
         if (analysis.Cells.Length == 0)
@@ -76,14 +64,7 @@ public sealed class AsciiRenderer
         return builder.ToString();
     }
 
-    public unsafe void Render(
-        byte[] rgb,
-        int sourceWidth,
-        int sourceHeight,
-        int columns,
-        int rows,
-        AsciiMode mode,
-        double edgeStrength = 0)
+    public unsafe void Render(byte[] rgb, int sourceWidth, int sourceHeight, int columns, int rows, AsciiMode mode, double edgeStrength = 0)
     {
         WriteableBitmap bitmap = EnsureBitmap(columns, rows);
         FrameAnalysis analysis = AnalyzeFrame(rgb, sourceWidth, sourceHeight, columns, rows);
@@ -110,10 +91,7 @@ public sealed class AsciiRenderer
                     byte[] mask = _glyphMasks[glyph];
                     double coverage = _glyphCoverage[glyph];
                     double coverageGain = Math.Clamp(TargetGlyphCoverage / coverage, 1.0, 3.2);
-                    double brightnessGain = Math.Clamp(
-                        1.12 * coverageGain * (1.0 + edgeAmount * 0.42),
-                        1.12,
-                        4.0);
+                    double brightnessGain = Math.Clamp(1.12 * coverageGain * (1.0 + edgeAmount * 0.42), 1.12, 4.0);
 
                     byte fgR;
                     byte fgG;
@@ -162,12 +140,7 @@ public sealed class AsciiRenderer
         }
     }
 
-    private static FrameAnalysis AnalyzeFrame(
-        byte[] rgb,
-        int sourceWidth,
-        int sourceHeight,
-        int columns,
-        int rows)
+    private static FrameAnalysis AnalyzeFrame(byte[] rgb, int sourceWidth, int sourceHeight, int columns, int rows)
     {
         if (sourceWidth <= 0 || sourceHeight <= 0 || columns <= 0 || rows <= 0)
             return FrameAnalysis.Empty;
@@ -176,9 +149,6 @@ public sealed class AsciiRenderer
         if (rgb.Length < sourcePixelCount * 3)
             return FrameAnalysis.Empty;
 
-        double[] r = new double[sourcePixelCount];
-        double[] g = new double[sourcePixelCount];
-        double[] b = new double[sourcePixelCount];
         double[] yChannel = new double[sourcePixelCount];
         double[] cb = new double[sourcePixelCount];
         double[] cr = new double[sourcePixelCount];
@@ -191,17 +161,11 @@ public sealed class AsciiRenderer
             double bb = rgb[source + 2] / 255.0;
             double yy = rr * 0.2126 + gg * 0.7152 + bb * 0.0722;
 
-            r[i] = rr;
-            g[i] = gg;
-            b[i] = bb;
             yChannel[i] = yy;
             cb[i] = (bb - yy) * 0.65;
             cr[i] = (rr - yy) * 0.65;
         }
 
-        r = GaussianBlur5x5(r, sourceWidth, sourceHeight);
-        g = GaussianBlur5x5(g, sourceWidth, sourceHeight);
-        b = GaussianBlur5x5(b, sourceWidth, sourceHeight);
         yChannel = GaussianBlur5x5(yChannel, sourceWidth, sourceHeight);
         cb = GaussianBlur5x5(cb, sourceWidth, sourceHeight);
         cr = GaussianBlur5x5(cr, sourceWidth, sourceHeight);
@@ -214,18 +178,15 @@ public sealed class AsciiRenderer
         bool[] edgeMask = HysteresisEdges(suppressed, sourceWidth, sourceHeight);
 
         var cells = new CellAnalysis[columns * rows];
-
         for (int cellY = 0; cellY < rows; cellY++)
         {
             int y0 = cellY * sourceHeight / rows;
-            int y1 = Math.Max(y0 + 1, (cellY + 1) * sourceHeight / rows);
-            y1 = Math.Min(y1, sourceHeight);
+            int y1 = Math.Min(Math.Max(y0 + 1, (cellY + 1) * sourceHeight / rows), sourceHeight);
 
             for (int cellX = 0; cellX < columns; cellX++)
             {
                 int x0 = cellX * sourceWidth / columns;
-                int x1 = Math.Max(x0 + 1, (cellX + 1) * sourceWidth / columns);
-                x1 = Math.Min(x1, sourceWidth);
+                int x1 = Math.Min(Math.Max(x0 + 1, (cellX + 1) * sourceWidth / columns), sourceWidth);
 
                 double sumR = 0;
                 double sumG = 0;
@@ -345,21 +306,16 @@ public sealed class AsciiRenderer
 
                 double gx = (-3 * tl + 3 * tr - 10 * ml + 10 * mr - 3 * bl + 3 * br) / 32.0;
                 double gy = (-3 * tl - 10 * tc - 3 * tr + 3 * bl + 10 * bc + 3 * br) / 32.0;
-                double magnitude = Math.Sqrt(gx * gx + gy * gy);
-                result[y * width + x] = new GradientSample(magnitude, gx, gy);
+                result[y * width + x] = new GradientSample(Math.Sqrt(gx * gx + gy * gy), gx, gy);
             }
         }
 
         return result;
     }
 
-    private static GradientSample[] CombineGradients(
-        GradientSample[] luminance,
-        GradientSample[] cb,
-        GradientSample[] cr)
+    private static GradientSample[] CombineGradients(GradientSample[] luminance, GradientSample[] cb, GradientSample[] cr)
     {
         var result = new GradientSample[luminance.Length];
-
         for (int i = 0; i < result.Length; i++)
         {
             GradientSample best = luminance[i];
@@ -385,7 +341,6 @@ public sealed class AsciiRenderer
     private static double[] NonMaximumSuppression(GradientSample[] gradient, int width, int height)
     {
         var result = new double[gradient.Length];
-
         for (int y = 1; y < height - 1; y++)
         {
             for (int x = 1; x < width - 1; x++)
@@ -401,7 +356,6 @@ public sealed class AsciiRenderer
 
                 double before;
                 double after;
-
                 if (angle < 22.5 || angle >= 157.5)
                 {
                     before = gradient[index - 1].Magnitude;
@@ -433,13 +387,29 @@ public sealed class AsciiRenderer
 
     private static bool[] HysteresisEdges(double[] suppressed, int width, int height)
     {
-        var values = suppressed.Where(v => v > 0).OrderBy(v => v).ToArray();
-        if (values.Length == 0)
+        double sum = 0;
+        double sumSquares = 0;
+        double max = 0;
+        int count = 0;
+
+        foreach (double value in suppressed)
+        {
+            if (value <= 0)
+                continue;
+
+            sum += value;
+            sumSquares += value * value;
+            max = Math.Max(max, value);
+            count++;
+        }
+
+        if (count == 0)
             return new bool[suppressed.Length];
 
-        double p85 = Percentile(values, 0.85);
-        double p95 = Percentile(values, 0.95);
-        double high = Math.Max(0.018, p85 * 0.72 + p95 * 0.18);
+        double mean = sum / count;
+        double variance = Math.Max(0, sumSquares / count - mean * mean);
+        double stdDev = Math.Sqrt(variance);
+        double high = Math.Clamp(mean + stdDev * 0.70, 0.018, Math.Max(0.018, max * 0.72));
         double low = high * 0.42;
 
         bool[] edges = new bool[suppressed.Length];
@@ -490,27 +460,11 @@ public sealed class AsciiRenderer
         return edges;
     }
 
-    private static double Percentile(double[] sortedValues, double percentile)
-    {
-        if (sortedValues.Length == 0)
-            return 0;
-
-        double position = Math.Clamp(percentile, 0.0, 1.0) * (sortedValues.Length - 1);
-        int lower = (int)Math.Floor(position);
-        int upper = (int)Math.Ceiling(position);
-        if (lower == upper)
-            return sortedValues[lower];
-
-        double fraction = position - lower;
-        return sortedValues[lower] * (1.0 - fraction) + sortedValues[upper] * fraction;
-    }
-
     private static char GetGlyph(double sourceLuminance, double edgeAmount)
     {
         double displayLuminance = GetDisplayLuminance(sourceLuminance, edgeAmount);
         int rampIndex = (int)Math.Round(displayLuminance * (Ramp.Length - 1));
-        rampIndex = Math.Clamp(rampIndex, 0, Ramp.Length - 1);
-        return Ramp[rampIndex];
+        return Ramp[Math.Clamp(rampIndex, 0, Ramp.Length - 1)];
     }
 
     private static double GetDisplayLuminance(double sourceLuminance, double edgeAmount) =>
