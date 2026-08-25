@@ -1,0 +1,18 @@
+name: Temporary build verification
+
+on:
+  push:
+    branches:
+      - feature/edge-enhancement-clean
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet restore BadWolfAsciiPlayer.sln
+      - run: dotnet build BadWolfAsciiPlayer.sln --configuration Release --no-restore
