@@ -49,17 +49,17 @@ Then either:
 
 When text is selected in **Selectable text** mode, the displayed text is temporarily kept stable so the selection is not lost while playback continues.
 
-Edge enhancement uses a Sobel luminance gradient on the already downscaled ASCII grid. Strong contours are emphasized and, when appropriate, rendered with directional `-`, `|`, `/`, and `\\` glyphs so faces and object boundaries remain easier to recognize against similarly bright backgrounds.
+Edge enhancement is calculated before the final ASCII downsampling. FFmpeg supplies a 3x denser RGB frame, the renderer applies a small Gaussian blur, computes a Sobel edge map, and then aggregates coherent contour information into each ASCII cell. Random high-frequency texture is suppressed by gradient-direction coherence, while real object boundaries slightly increase glyph density and brightness instead of being replaced by directional slash characters.
 
 ## How it works
 
 Bitmap video path:
 
-`FFmpeg -> scaled RGB24 frames -> luminance + Sobel edge analysis -> ASCII renderer -> WPF WriteableBitmap`
+`FFmpeg -> 3x RGB24 analysis frame -> Gaussian blur -> Sobel edge map -> ASCII cell aggregation -> WPF WriteableBitmap`
 
 Selectable-text video path:
 
-`FFmpeg -> scaled RGB24 frames -> luminance + Sobel edge analysis -> glyph conversion -> read-only WPF TextBox`
+`FFmpeg -> 3x RGB24 analysis frame -> Gaussian blur -> Sobel edge map -> ASCII cell aggregation -> read-only WPF TextBox`
 
 Audio path:
 
