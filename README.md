@@ -49,7 +49,7 @@ Then either:
 
 When text is selected in **Selectable text** mode, the displayed text is temporarily kept stable so the selection is not lost while playback continues.
 
-Edge enhancement is calculated before the final ASCII downsampling. FFmpeg supplies a 3x denser RGB frame and the renderer uses a Canny-style pipeline: 5x5 Gaussian smoothing, color-aware Scharr gradients, non-maximum suppression, and adaptive hysteresis thresholding. Luminance and chroma boundaries are analyzed separately and the strongest response is retained, so contours with similar brightness but different color can still survive. Confirmed contours increase glyph density and brightness instead of being replaced by directional slash characters.
+Edge enhancement is calculated before the final ASCII downsampling. FFmpeg supplies a 3x denser RGB frame and the renderer uses a Canny-style pipeline: 5x5 Gaussian smoothing, color-aware Scharr gradients, non-maximum suppression, and adaptive hysteresis thresholding. Luminance and chroma boundaries are analyzed separately and the strongest response is retained, allowing contours with similar brightness but different color to survive. Confirmed contours increase glyph density and brightness instead of introducing directional edge characters.
 
 ## How it works
 
