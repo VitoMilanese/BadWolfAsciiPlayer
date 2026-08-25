@@ -20,7 +20,6 @@
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="Margin" Value="3"/>
         </Style>
-
         <Style TargetType="ComboBoxItem">
             <Setter Property="Foreground" Value="#F2F2F2"/>
             <Setter Property="Background" Value="#262626"/>
@@ -33,21 +32,14 @@
                             <ContentPresenter VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#3A3A3A"/>
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#484848"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Foreground" Value="#777777"/>
-                            </Trigger>
+                            <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemBorder" Property="Background" Value="#3A3A3A"/></Trigger>
+                            <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemBorder" Property="Background" Value="#484848"/></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="#777777"/></Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
-
         <Style TargetType="ComboBox">
             <Setter Property="Background" Value="#262626"/>
             <Setter Property="Foreground" Value="#F2F2F2"/>
@@ -61,10 +53,7 @@
                         <Grid>
                             <Border x:Name="OuterBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="2">
                                 <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="28"/>
-                                    </Grid.ColumnDefinitions>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="28"/></Grid.ColumnDefinitions>
                                     <ContentPresenter Grid.Column="0" Margin="{TemplateBinding Padding}" VerticalAlignment="Center" HorizontalAlignment="Left" Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" IsHitTestVisible="False"/>
                                     <Border Grid.Column="1" BorderBrush="#444444" BorderThickness="1,0,0,0">
                                         <Path Width="8" Height="5" HorizontalAlignment="Center" VerticalAlignment="Center" Fill="#D8D8D8" Data="M 0 0 L 8 0 L 4 5 Z"/>
@@ -74,9 +63,7 @@
                             <ToggleButton Background="Transparent" BorderThickness="0" Focusable="False" ClickMode="Press" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"/>
                             <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True" Focusable="False" IsOpen="{TemplateBinding IsDropDownOpen}" PopupAnimation="Fade">
                                 <Border Margin="0,2,0,0" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="260" Background="#262626" BorderBrush="#555555" BorderThickness="1" CornerRadius="2">
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                        <StackPanel IsItemsHost="True"/>
-                                    </ScrollViewer>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel IsItemsHost="True"/></ScrollViewer>
                                 </Border>
                             </Popup>
                         </Grid>
@@ -121,6 +108,13 @@
             <Button x:Name="CopyFrameButton" Click="CopyFrame_Click" IsEnabled="False" Padding="10,4">Copy frame</Button>
             <TextBlock Text="Mode" VerticalAlignment="Center" Margin="12,0,2,0"/>
             <ComboBox x:Name="ModeCombo" Width="110" SelectionChanged="RenderSetting_Changed"><ComboBoxItem Content="Color" IsSelected="True"/><ComboBoxItem Content="Mono"/></ComboBox>
+            <TextBlock Text="Edges" VerticalAlignment="Center" Margin="12,0,2,0" ToolTip="Color-aware contour enhancement"/>
+            <ComboBox x:Name="EdgeCombo" Width="105" SelectionChanged="RenderSetting_Changed" ToolTip="Color-aware Canny contour enhancement">
+                <ComboBoxItem Content="Off"/>
+                <ComboBoxItem Content="Low"/>
+                <ComboBoxItem Content="Medium" IsSelected="True"/>
+                <ComboBoxItem Content="High"/>
+            </ComboBox>
             <TextBlock Text="Columns" VerticalAlignment="Center" Margin="12,0,2,0"/>
             <ComboBox x:Name="ColumnsCombo" Width="90" SelectionChanged="RenderSetting_Changed"><ComboBoxItem Content="80"/><ComboBoxItem Content="120"/><ComboBoxItem Content="160" IsSelected="True"/><ComboBoxItem Content="200"/><ComboBoxItem Content="240"/></ComboBox>
             <TextBlock Text="FPS" VerticalAlignment="Center" Margin="12,0,2,0"/>

@@ -35,21 +35,16 @@ public sealed class AsciiRenderer
         {
             _columns = columns;
             _rows = rows;
-            _bitmap = new WriteableBitmap(
-                columns * CellWidth,
-                rows * CellHeight,
-                96,
-                96,
-                PixelFormats.Bgra32,
-                null);
+            _bitmap = new WriteableBitmap(columns * CellWidth, rows * CellHeight, 96, 96, PixelFormats.Bgra32, null);
         }
 
         return _bitmap;
     }
 
-    public string RenderText(byte[] rgb, int columns, int rows)
+    public string RenderText(byte[] rgb, int sourceWidth, int sourceHeight, int columns, int rows, double edgeStrength = 0)
     {
-        if (rgb.Length < columns * rows * 3)
+        FrameAnalysis analysis = AnalyzeFrame(rgb, sourceWidth, sourceHeight, columns, rows);
+        if (analysis.Cells.Length == 0)
             return string.Empty;
 
         var builder = new StringBuilder((columns + Environment.NewLine.Length) * rows);
@@ -57,8 +52,9 @@ public sealed class AsciiRenderer
         {
             for (int x = 0; x < columns; x++)
             {
-                int source = (y * columns + x) * 3;
-                builder.Append(GetGlyph(rgb[source], rgb[source + 1], rgb[source + 2]));
+                CellAnalysis cell = analysis.Cells[y * columns + x];
+                double edgeAmount = Math.Clamp(cell.EdgeScore * edgeStrength, 0.0, 1.0);
+                builder.Append(GetGlyph(cell.Luminance, edgeAmount));
             }
 
             if (y < rows - 1)
@@ -68,10 +64,11 @@ public sealed class AsciiRenderer
         return builder.ToString();
     }
 
-    public unsafe void Render(byte[] rgb, int columns, int rows, AsciiMode mode)
+    public unsafe void Render(byte[] rgb, int sourceWidth, int sourceHeight, int columns, int rows, AsciiMode mode, double edgeStrength = 0)
     {
         WriteableBitmap bitmap = EnsureBitmap(columns, rows);
-        if (rgb.Length < columns * rows * 3)
+        FrameAnalysis analysis = AnalyzeFrame(rgb, sourceWidth, sourceHeight, columns, rows);
+        if (analysis.Cells.Length == 0)
             return;
 
         bitmap.Lock();
@@ -87,18 +84,14 @@ public sealed class AsciiRenderer
             {
                 for (int cellX = 0; cellX < columns; cellX++)
                 {
-                    int source = (cellY * columns + cellX) * 3;
-                    byte r = rgb[source];
-                    byte g = rgb[source + 1];
-                    byte b = rgb[source + 2];
-
-                    double sourceLuminance = GetSourceLuminance(r, g, b);
-                    double displayLuminance = Math.Pow(sourceLuminance, 0.72);
-                    char glyph = GetGlyphFromDisplayLuminance(displayLuminance);
+                    CellAnalysis cell = analysis.Cells[cellY * columns + cellX];
+                    double edgeAmount = Math.Clamp(cell.EdgeScore * edgeStrength, 0.0, 1.0);
+                    double displayLuminance = GetDisplayLuminance(cell.Luminance, edgeAmount);
+                    char glyph = GetGlyph(cell.Luminance, edgeAmount);
                     byte[] mask = _glyphMasks[glyph];
                     double coverage = _glyphCoverage[glyph];
                     double coverageGain = Math.Clamp(TargetGlyphCoverage / coverage, 1.0, 3.2);
-                    double brightnessGain = Math.Clamp(1.12 * coverageGain, 1.12, 3.4);
+                    double brightnessGain = Math.Clamp(1.12 * coverageGain * (1.0 + edgeAmount * 0.42), 1.12, 4.0);
 
                     byte fgR;
                     byte fgG;
@@ -112,10 +105,11 @@ public sealed class AsciiRenderer
                     }
                     else
                     {
-                        double colorGain = sourceLuminance < 0.015 ? 1.0 : brightnessGain;
-                        fgR = ToByte(r * colorGain);
-                        fgG = ToByte(g * colorGain);
-                        fgB = ToByte(b * colorGain);
+                        double colorGain = cell.Luminance < 0.015 ? 1.0 : brightnessGain;
+                        double highlight = edgeAmount * 0.22;
+                        fgR = ToByte((cell.R * colorGain) * (1.0 - highlight) + 255.0 * highlight);
+                        fgG = ToByte((cell.G * colorGain) * (1.0 - highlight) + 255.0 * highlight);
+                        fgB = ToByte((cell.B * colorGain) * (1.0 - highlight) + 255.0 * highlight);
                     }
 
                     int originX = cellX * CellWidth;
@@ -146,18 +140,335 @@ public sealed class AsciiRenderer
         }
     }
 
-    private static char GetGlyph(byte r, byte g, byte b)
+    private static FrameAnalysis AnalyzeFrame(byte[] rgb, int sourceWidth, int sourceHeight, int columns, int rows)
     {
-        double displayLuminance = Math.Pow(GetSourceLuminance(r, g, b), 0.72);
-        return GetGlyphFromDisplayLuminance(displayLuminance);
+        if (sourceWidth <= 0 || sourceHeight <= 0 || columns <= 0 || rows <= 0)
+            return FrameAnalysis.Empty;
+
+        int sourcePixelCount = checked(sourceWidth * sourceHeight);
+        if (rgb.Length < sourcePixelCount * 3)
+            return FrameAnalysis.Empty;
+
+        double[] yChannel = new double[sourcePixelCount];
+        double[] cb = new double[sourcePixelCount];
+        double[] cr = new double[sourcePixelCount];
+
+        for (int i = 0; i < sourcePixelCount; i++)
+        {
+            int source = i * 3;
+            double rr = rgb[source] / 255.0;
+            double gg = rgb[source + 1] / 255.0;
+            double bb = rgb[source + 2] / 255.0;
+            double yy = rr * 0.2126 + gg * 0.7152 + bb * 0.0722;
+
+            yChannel[i] = yy;
+            cb[i] = (bb - yy) * 0.65;
+            cr[i] = (rr - yy) * 0.65;
+        }
+
+        yChannel = GaussianBlur5x5(yChannel, sourceWidth, sourceHeight);
+        cb = GaussianBlur5x5(cb, sourceWidth, sourceHeight);
+        cr = GaussianBlur5x5(cr, sourceWidth, sourceHeight);
+
+        GradientSample[] yGradient = BuildScharrGradient(yChannel, sourceWidth, sourceHeight);
+        GradientSample[] cbGradient = BuildScharrGradient(cb, sourceWidth, sourceHeight);
+        GradientSample[] crGradient = BuildScharrGradient(cr, sourceWidth, sourceHeight);
+        GradientSample[] combinedGradient = CombineGradients(yGradient, cbGradient, crGradient);
+        double[] suppressed = NonMaximumSuppression(combinedGradient, sourceWidth, sourceHeight);
+        bool[] edgeMask = HysteresisEdges(suppressed, sourceWidth, sourceHeight);
+
+        var cells = new CellAnalysis[columns * rows];
+        for (int cellY = 0; cellY < rows; cellY++)
+        {
+            int y0 = cellY * sourceHeight / rows;
+            int y1 = Math.Min(Math.Max(y0 + 1, (cellY + 1) * sourceHeight / rows), sourceHeight);
+
+            for (int cellX = 0; cellX < columns; cellX++)
+            {
+                int x0 = cellX * sourceWidth / columns;
+                int x1 = Math.Min(Math.Max(x0 + 1, (cellX + 1) * sourceWidth / columns), sourceWidth);
+
+                double sumR = 0;
+                double sumG = 0;
+                double sumB = 0;
+                double sumLuma = 0;
+                double edgeSum = 0;
+                double edgePeak = 0;
+                int edgeCount = 0;
+                int pixelCount = 0;
+
+                for (int yy = y0; yy < y1; yy++)
+                {
+                    int rowOffset = yy * sourceWidth;
+                    for (int xx = x0; xx < x1; xx++)
+                    {
+                        int index = rowOffset + xx;
+                        int source = index * 3;
+                        sumR += rgb[source];
+                        sumG += rgb[source + 1];
+                        sumB += rgb[source + 2];
+                        sumLuma += GetSourceLuminance(rgb[source], rgb[source + 1], rgb[source + 2]);
+                        pixelCount++;
+
+                        if (!edgeMask[index])
+                            continue;
+
+                        double magnitude = suppressed[index];
+                        edgeCount++;
+                        edgeSum += magnitude;
+                        edgePeak = Math.Max(edgePeak, magnitude);
+                    }
+                }
+
+                if (pixelCount == 0)
+                    continue;
+
+                double edgeScore = 0;
+                if (edgeCount > 0)
+                {
+                    double mean = edgeSum / edgeCount;
+                    double coverage = edgeCount / (double)pixelCount;
+                    double coverageWeight = Math.Clamp(coverage * 2.8, 0.55, 1.0);
+                    edgeScore = Math.Clamp((edgePeak * 0.62 + mean * 0.38) * coverageWeight * 2.15, 0.0, 1.0);
+                }
+
+                cells[cellY * columns + cellX] = new CellAnalysis(
+                    ToByte(sumR / pixelCount),
+                    ToByte(sumG / pixelCount),
+                    ToByte(sumB / pixelCount),
+                    sumLuma / pixelCount,
+                    edgeScore);
+            }
+        }
+
+        return new FrameAnalysis(cells);
     }
 
-    private static char GetGlyphFromDisplayLuminance(double displayLuminance)
+    private static double[] GaussianBlur5x5(double[] source, int width, int height)
     {
-        int rampIndex = (int)Math.Round(displayLuminance * (Ramp.Length - 1));
-        rampIndex = Math.Clamp(rampIndex, 0, Ramp.Length - 1);
-        return Ramp[rampIndex];
+        if (source.Length == 0)
+            return Array.Empty<double>();
+
+        double[] horizontal = new double[source.Length];
+        double[] result = new double[source.Length];
+        int[] kernel = [1, 4, 6, 4, 1];
+
+        for (int y = 0; y < height; y++)
+        {
+            int row = y * width;
+            for (int x = 0; x < width; x++)
+            {
+                double sum = 0;
+                for (int k = -2; k <= 2; k++)
+                {
+                    int sx = Math.Clamp(x + k, 0, width - 1);
+                    sum += source[row + sx] * kernel[k + 2];
+                }
+                horizontal[row + x] = sum / 16.0;
+            }
+        }
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                double sum = 0;
+                for (int k = -2; k <= 2; k++)
+                {
+                    int sy = Math.Clamp(y + k, 0, height - 1);
+                    sum += horizontal[sy * width + x] * kernel[k + 2];
+                }
+                result[y * width + x] = sum / 16.0;
+            }
+        }
+
+        return result;
     }
+
+    private static GradientSample[] BuildScharrGradient(double[] source, int width, int height)
+    {
+        var result = new GradientSample[source.Length];
+        if (width < 3 || height < 3)
+            return result;
+
+        for (int y = 1; y < height - 1; y++)
+        {
+            for (int x = 1; x < width - 1; x++)
+            {
+                double tl = source[(y - 1) * width + x - 1];
+                double tc = source[(y - 1) * width + x];
+                double tr = source[(y - 1) * width + x + 1];
+                double ml = source[y * width + x - 1];
+                double mr = source[y * width + x + 1];
+                double bl = source[(y + 1) * width + x - 1];
+                double bc = source[(y + 1) * width + x];
+                double br = source[(y + 1) * width + x + 1];
+
+                double gx = (-3 * tl + 3 * tr - 10 * ml + 10 * mr - 3 * bl + 3 * br) / 32.0;
+                double gy = (-3 * tl - 10 * tc - 3 * tr + 3 * bl + 10 * bc + 3 * br) / 32.0;
+                result[y * width + x] = new GradientSample(Math.Sqrt(gx * gx + gy * gy), gx, gy);
+            }
+        }
+
+        return result;
+    }
+
+    private static GradientSample[] CombineGradients(GradientSample[] luminance, GradientSample[] cb, GradientSample[] cr)
+    {
+        var result = new GradientSample[luminance.Length];
+        for (int i = 0; i < result.Length; i++)
+        {
+            GradientSample best = luminance[i];
+            double bestWeighted = best.Magnitude;
+
+            double cbWeighted = cb[i].Magnitude * 1.15;
+            if (cbWeighted > bestWeighted)
+            {
+                best = new GradientSample(cbWeighted, cb[i].Gx * 1.15, cb[i].Gy * 1.15);
+                bestWeighted = cbWeighted;
+            }
+
+            double crWeighted = cr[i].Magnitude * 1.15;
+            if (crWeighted > bestWeighted)
+                best = new GradientSample(crWeighted, cr[i].Gx * 1.15, cr[i].Gy * 1.15);
+
+            result[i] = best;
+        }
+
+        return result;
+    }
+
+    private static double[] NonMaximumSuppression(GradientSample[] gradient, int width, int height)
+    {
+        var result = new double[gradient.Length];
+        for (int y = 1; y < height - 1; y++)
+        {
+            for (int x = 1; x < width - 1; x++)
+            {
+                int index = y * width + x;
+                GradientSample current = gradient[index];
+                if (current.Magnitude <= 0)
+                    continue;
+
+                double angle = Math.Atan2(current.Gy, current.Gx) * 180.0 / Math.PI;
+                if (angle < 0)
+                    angle += 180.0;
+
+                double before;
+                double after;
+                if (angle < 22.5 || angle >= 157.5)
+                {
+                    before = gradient[index - 1].Magnitude;
+                    after = gradient[index + 1].Magnitude;
+                }
+                else if (angle < 67.5)
+                {
+                    before = gradient[(y - 1) * width + x + 1].Magnitude;
+                    after = gradient[(y + 1) * width + x - 1].Magnitude;
+                }
+                else if (angle < 112.5)
+                {
+                    before = gradient[(y - 1) * width + x].Magnitude;
+                    after = gradient[(y + 1) * width + x].Magnitude;
+                }
+                else
+                {
+                    before = gradient[(y - 1) * width + x - 1].Magnitude;
+                    after = gradient[(y + 1) * width + x + 1].Magnitude;
+                }
+
+                if (current.Magnitude >= before && current.Magnitude >= after)
+                    result[index] = current.Magnitude;
+            }
+        }
+
+        return result;
+    }
+
+    private static bool[] HysteresisEdges(double[] suppressed, int width, int height)
+    {
+        double sum = 0;
+        double sumSquares = 0;
+        double max = 0;
+        int count = 0;
+
+        foreach (double value in suppressed)
+        {
+            if (value <= 0)
+                continue;
+
+            sum += value;
+            sumSquares += value * value;
+            max = Math.Max(max, value);
+            count++;
+        }
+
+        if (count == 0)
+            return new bool[suppressed.Length];
+
+        double mean = sum / count;
+        double variance = Math.Max(0, sumSquares / count - mean * mean);
+        double stdDev = Math.Sqrt(variance);
+        double high = Math.Clamp(mean + stdDev * 0.70, 0.018, Math.Max(0.018, max * 0.72));
+        double low = high * 0.42;
+
+        bool[] edges = new bool[suppressed.Length];
+        bool[] visited = new bool[suppressed.Length];
+        var queue = new Queue<int>();
+
+        for (int y = 1; y < height - 1; y++)
+        {
+            for (int x = 1; x < width - 1; x++)
+            {
+                int index = y * width + x;
+                if (suppressed[index] >= high)
+                {
+                    edges[index] = true;
+                    visited[index] = true;
+                    queue.Enqueue(index);
+                }
+            }
+        }
+
+        int[] offsets = [-width - 1, -width, -width + 1, -1, 1, width - 1, width, width + 1];
+        while (queue.Count > 0)
+        {
+            int current = queue.Dequeue();
+            int cx = current % width;
+            int cy = current / width;
+
+            foreach (int offset in offsets)
+            {
+                int next = current + offset;
+                if (next <= 0 || next >= suppressed.Length - 1 || visited[next])
+                    continue;
+
+                int nx = next % width;
+                int ny = next / width;
+                if (Math.Abs(nx - cx) > 1 || Math.Abs(ny - cy) > 1)
+                    continue;
+
+                visited[next] = true;
+                if (suppressed[next] < low)
+                    continue;
+
+                edges[next] = true;
+                queue.Enqueue(next);
+            }
+        }
+
+        return edges;
+    }
+
+    private static char GetGlyph(double sourceLuminance, double edgeAmount)
+    {
+        double displayLuminance = GetDisplayLuminance(sourceLuminance, edgeAmount);
+        int rampIndex = (int)Math.Round(displayLuminance * (Ramp.Length - 1));
+        return Ramp[Math.Clamp(rampIndex, 0, Ramp.Length - 1)];
+    }
+
+    private static double GetDisplayLuminance(double sourceLuminance, double edgeAmount) =>
+        Math.Clamp(Math.Pow(sourceLuminance, 0.72) + edgeAmount * 0.34, 0.0, 1.0);
 
     private static double GetSourceLuminance(byte r, byte g, byte b) =>
         (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255.0;
@@ -197,5 +508,12 @@ public sealed class AsciiRenderer
         }
 
         return mask;
+    }
+
+    private readonly record struct GradientSample(double Magnitude, double Gx, double Gy);
+    private readonly record struct CellAnalysis(byte R, byte G, byte B, double Luminance, double EdgeScore);
+    private readonly record struct FrameAnalysis(CellAnalysis[] Cells)
+    {
+        public static FrameAnalysis Empty { get; } = new(Array.Empty<CellAnalysis>());
     }
 }

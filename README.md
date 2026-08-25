@@ -43,20 +43,23 @@ Then either:
 - Bitmap or selectable-text display mode
 - Select and copy ASCII characters directly with the mouse and `Ctrl+C`
 - **Copy frame** to copy the complete current frame as plain ASCII text
+- Edge enhancement: **Off / Low / Medium / High**
 - 80 / 120 / 160 / 200 / 240 columns
 - 15 / 24 / 30 / 60 ASCII FPS
 
 When text is selected in **Selectable text** mode, the displayed text is temporarily kept stable so the selection is not lost while playback continues.
 
+Edge enhancement is calculated before the final ASCII downsampling. FFmpeg supplies a 3x denser RGB frame and the renderer uses a Canny-style pipeline: 5x5 Gaussian smoothing, color-aware Scharr gradients, non-maximum suppression, and adaptive hysteresis thresholding. Luminance and chroma boundaries are analyzed separately and the strongest response is retained, allowing contours with similar brightness but different color to survive. Confirmed contours increase glyph density and brightness instead of introducing directional edge characters.
+
 ## How it works
 
 Bitmap video path:
 
-`FFmpeg -> scaled RGB24 frames -> ASCII renderer -> WPF WriteableBitmap`
+`FFmpeg -> 3x RGB24 analysis frame -> Gaussian blur -> luminance/chroma Scharr gradients -> non-maximum suppression -> adaptive hysteresis -> ASCII renderer -> WPF WriteableBitmap`
 
 Selectable-text video path:
 
-`FFmpeg -> scaled RGB24 frames -> luminance-to-glyph conversion -> read-only WPF TextBox`
+`FFmpeg -> 3x RGB24 analysis frame -> Gaussian blur -> luminance/chroma Scharr gradients -> non-maximum suppression -> adaptive hysteresis -> glyph conversion -> read-only WPF TextBox`
 
 Audio path:
 
