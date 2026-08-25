@@ -24,6 +24,10 @@ public partial class MainWindow : Window
     private bool _isSeeking;
     private bool _handlingMediaEnd;
     private long _decoderGeneration;
+    private byte[]? _lastFrame;
+    private int _lastFrameColumns;
+    private int _lastFrameRows;
+    private string _lastAsciiText = string.Empty;
 
     public MainWindow()
     {
@@ -70,7 +74,11 @@ public partial class MainWindow : Window
         StatusText.Text = "Opening...";
         PlayPauseButton.IsEnabled = false;
         SeekSlider.IsEnabled = false;
+        CopyFrameButton.IsEnabled = false;
         _isPlaying = false;
+        _lastFrame = null;
+        _lastAsciiText = string.Empty;
+        SelectableAsciiText.Clear();
         await StopDecoderAsync();
 
         try
@@ -88,8 +96,6 @@ public partial class MainWindow : Window
             PlayPauseButton.Content = "Play";
 
             await _audioPlayer.OpenAsync(filePath, TimeSpan.Zero);
-
-            // Decode one frame immediately so the video is visible before Play is pressed.
             await RestartDecoderAsync(TimeSpan.Zero);
 
             PlayPauseButton.IsEnabled = true;
@@ -206,7 +212,48 @@ public partial class MainWindow : Window
         if (!IsLoaded || _filePath is null || _videoInfo is null)
             return;
 
+        SelectableAsciiText.Select(0, 0);
         await RestartDecoderAsync(_audioPlayer.Position);
+    }
+
+    private void DisplayMode_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded)
+            return;
+
+        UpdateDisplayMode();
+    }
+
+    private void UpdateDisplayMode()
+    {
+        bool selectable = IsSelectableTextMode();
+        AsciiImage.Visibility = selectable ? Visibility.Collapsed : Visibility.Visible;
+        SelectableAsciiView.Visibility = selectable ? Visibility.Visible : Visibility.Collapsed;
+
+        if (selectable && _lastFrame is not null)
+        {
+            _lastAsciiText = _renderer.RenderText(_lastFrame, _lastFrameColumns, _lastFrameRows);
+            SelectableAsciiText.Text = _lastAsciiText;
+        }
+    }
+
+    private void CopyFrame_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lastFrame is null)
+            return;
+
+        if (string.IsNullOrEmpty(_lastAsciiText))
+            _lastAsciiText = _renderer.RenderText(_lastFrame, _lastFrameColumns, _lastFrameRows);
+
+        try
+        {
+            Clipboard.SetText(_lastAsciiText);
+            StatusText.Text = "ASCII frame copied";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Could not copy frame: {ex.Message}";
+        }
     }
 
     private async Task RestartDecoderAsync(TimeSpan startAt)
@@ -266,8 +313,29 @@ public partial class MainWindow : Window
 
                     await Dispatcher.InvokeAsync(() =>
                     {
-                        if (generation == Volatile.Read(ref _decoderGeneration))
+                        if (generation != Volatile.Read(ref _decoderGeneration))
+                            return;
+
+                        _lastFrame = frame;
+                        _lastFrameColumns = columns;
+                        _lastFrameRows = rows;
+                        _lastAsciiText = string.Empty;
+                        CopyFrameButton.IsEnabled = true;
+
+                        if (IsSelectableTextMode())
+                        {
+                            // Keep the currently selected text stable so it can actually be copied
+                            // while video playback continues behind the selection.
+                            if (SelectableAsciiText.SelectionLength == 0)
+                            {
+                                _lastAsciiText = _renderer.RenderText(frame, columns, rows);
+                                SelectableAsciiText.Text = _lastAsciiText;
+                            }
+                        }
+                        else
+                        {
                             _renderer.Render(frame, columns, rows, mode);
+                        }
                     }, DispatcherPriority.Render, token);
 
                     bool isPlaying = await Dispatcher.InvokeAsync(() => _isPlaying, DispatcherPriority.Background, token);
@@ -319,6 +387,12 @@ public partial class MainWindow : Window
                 cts.Dispose();
             }
         }
+    }
+
+    private bool IsSelectableTextMode()
+    {
+        return DisplayCombo.SelectedItem is ComboBoxItem item
+            && string.Equals(item.Content?.ToString(), "Selectable text", StringComparison.OrdinalIgnoreCase);
     }
 
     private AsciiMode GetMode()
