@@ -11,10 +11,9 @@ public sealed class AsciiRenderer
     public const int CellHeight = 10;
 
     private const string Ramp = ".:-=+*#%@";
-    private const string EdgeGlyphs = "-|/\\";
     private const double TargetGlyphCoverage = 0.58;
-    private const double EdgeThreshold = 0.055;
-    private const double EdgeRange = 0.32;
+    private const double EdgeThreshold = 0.035;
+    private const double EdgeRange = 0.20;
 
     private readonly Dictionary<char, byte[]> _glyphMasks = new();
     private readonly Dictionary<char, double> _glyphCoverage = new();
@@ -24,7 +23,7 @@ public sealed class AsciiRenderer
 
     public AsciiRenderer()
     {
-        foreach (char c in Ramp.Concat(EdgeGlyphs).Distinct())
+        foreach (char c in Ramp)
         {
             byte[] mask = CreateGlyphMask(c);
             _glyphMasks[c] = mask;
@@ -50,20 +49,26 @@ public sealed class AsciiRenderer
         return _bitmap;
     }
 
-    public string RenderText(byte[] rgb, int columns, int rows, double edgeStrength = 0)
+    public string RenderText(
+        byte[] rgb,
+        int sourceWidth,
+        int sourceHeight,
+        int columns,
+        int rows,
+        double edgeStrength = 0)
     {
-        if (rgb.Length < columns * rows * 3)
+        FrameAnalysis analysis = AnalyzeFrame(rgb, sourceWidth, sourceHeight, columns, rows);
+        if (analysis.Cells.Length == 0)
             return string.Empty;
 
-        double[] luminance = BuildLuminanceMap(rgb, columns, rows);
         var builder = new StringBuilder((columns + Environment.NewLine.Length) * rows);
-
         for (int y = 0; y < rows; y++)
         {
             for (int x = 0; x < columns; x++)
             {
-                EdgeInfo edge = GetEdge(luminance, columns, rows, x, y);
-                builder.Append(GetGlyph(luminance[y * columns + x], edge, edgeStrength));
+                CellAnalysis cell = analysis.Cells[y * columns + x];
+                double edgeAmount = GetEdgeAmount(cell.EdgeScore, edgeStrength);
+                builder.Append(GetGlyph(cell.Luminance, edgeAmount));
             }
 
             if (y < rows - 1)
@@ -73,13 +78,19 @@ public sealed class AsciiRenderer
         return builder.ToString();
     }
 
-    public unsafe void Render(byte[] rgb, int columns, int rows, AsciiMode mode, double edgeStrength = 0)
+    public unsafe void Render(
+        byte[] rgb,
+        int sourceWidth,
+        int sourceHeight,
+        int columns,
+        int rows,
+        AsciiMode mode,
+        double edgeStrength = 0)
     {
         WriteableBitmap bitmap = EnsureBitmap(columns, rows);
-        if (rgb.Length < columns * rows * 3)
+        FrameAnalysis analysis = AnalyzeFrame(rgb, sourceWidth, sourceHeight, columns, rows);
+        if (analysis.Cells.Length == 0)
             return;
-
-        double[] luminance = BuildLuminanceMap(rgb, columns, rows);
 
         bitmap.Lock();
         try
@@ -94,28 +105,17 @@ public sealed class AsciiRenderer
             {
                 for (int cellX = 0; cellX < columns; cellX++)
                 {
-                    int cellIndex = cellY * columns + cellX;
-                    int source = cellIndex * 3;
-                    byte r = rgb[source];
-                    byte g = rgb[source + 1];
-                    byte b = rgb[source + 2];
-
-                    double sourceLuminance = luminance[cellIndex];
-                    EdgeInfo edge = GetEdge(luminance, columns, rows, cellX, cellY);
-                    double edgeAmount = GetEdgeAmount(edge.Magnitude, edgeStrength);
-                    double displayLuminance = Math.Clamp(
-                        Math.Pow(sourceLuminance, 0.72) + edgeAmount * 0.48,
-                        0.0,
-                        1.0);
-
-                    char glyph = GetGlyph(sourceLuminance, edge, edgeStrength);
+                    CellAnalysis cell = analysis.Cells[cellY * columns + cellX];
+                    double edgeAmount = GetEdgeAmount(cell.EdgeScore, edgeStrength);
+                    double displayLuminance = GetDisplayLuminance(cell.Luminance, edgeAmount);
+                    char glyph = GetGlyph(cell.Luminance, edgeAmount);
                     byte[] mask = _glyphMasks[glyph];
                     double coverage = _glyphCoverage[glyph];
                     double coverageGain = Math.Clamp(TargetGlyphCoverage / coverage, 1.0, 3.2);
                     double brightnessGain = Math.Clamp(
-                        1.12 * coverageGain * (1.0 + edgeAmount * 0.75),
+                        1.12 * coverageGain * (1.0 + edgeAmount * 0.32),
                         1.12,
-                        4.0);
+                        3.8);
 
                     byte fgR;
                     byte fgG;
@@ -129,10 +129,11 @@ public sealed class AsciiRenderer
                     }
                     else
                     {
-                        double colorGain = sourceLuminance < 0.015 ? 1.0 : brightnessGain;
-                        fgR = ToByte(r * colorGain);
-                        fgG = ToByte(g * colorGain);
-                        fgB = ToByte(b * colorGain);
+                        double colorGain = cell.Luminance < 0.015 ? 1.0 : brightnessGain;
+                        double highlight = edgeAmount * 0.16;
+                        fgR = ToByte((cell.R * colorGain) * (1.0 - highlight) + 255.0 * highlight);
+                        fgG = ToByte((cell.G * colorGain) * (1.0 - highlight) + 255.0 * highlight);
+                        fgB = ToByte((cell.B * colorGain) * (1.0 - highlight) + 255.0 * highlight);
                     }
 
                     int originX = cellX * CellWidth;
@@ -163,79 +164,191 @@ public sealed class AsciiRenderer
         }
     }
 
-    private static double[] BuildLuminanceMap(byte[] rgb, int columns, int rows)
+    private static FrameAnalysis AnalyzeFrame(
+        byte[] rgb,
+        int sourceWidth,
+        int sourceHeight,
+        int columns,
+        int rows)
     {
-        var result = new double[columns * rows];
-        for (int i = 0; i < result.Length; i++)
+        if (sourceWidth <= 0 || sourceHeight <= 0 || columns <= 0 || rows <= 0)
+            return FrameAnalysis.Empty;
+
+        int sourcePixelCount = checked(sourceWidth * sourceHeight);
+        if (rgb.Length < sourcePixelCount * 3)
+            return FrameAnalysis.Empty;
+
+        double[] luminance = new double[sourcePixelCount];
+        for (int i = 0; i < sourcePixelCount; i++)
         {
             int source = i * 3;
-            result[i] = GetSourceLuminance(rgb[source], rgb[source + 1], rgb[source + 2]);
+            luminance[i] = GetSourceLuminance(rgb[source], rgb[source + 1], rgb[source + 2]);
+        }
+
+        double[] blurred = GaussianBlur3x3(luminance, sourceWidth, sourceHeight);
+        EdgeSample[] edges = BuildEdgeMap(blurred, sourceWidth, sourceHeight);
+        var cells = new CellAnalysis[columns * rows];
+
+        for (int cellY = 0; cellY < rows; cellY++)
+        {
+            int y0 = cellY * sourceHeight / rows;
+            int y1 = Math.Max(y0 + 1, (cellY + 1) * sourceHeight / rows);
+            y1 = Math.Min(y1, sourceHeight);
+
+            for (int cellX = 0; cellX < columns; cellX++)
+            {
+                int x0 = cellX * sourceWidth / columns;
+                int x1 = Math.Max(x0 + 1, (cellX + 1) * sourceWidth / columns);
+                x1 = Math.Min(x1, sourceWidth);
+
+                double sumR = 0;
+                double sumG = 0;
+                double sumB = 0;
+                double sumLuma = 0;
+                double edgeMagnitudeSum = 0;
+                double edgeGxSum = 0;
+                double edgeGySum = 0;
+                double maxMagnitude = 0;
+                int pixelCount = 0;
+                int strongEdgeCount = 0;
+
+                for (int y = y0; y < y1; y++)
+                {
+                    int rowOffset = y * sourceWidth;
+                    for (int x = x0; x < x1; x++)
+                    {
+                        int index = rowOffset + x;
+                        int source = index * 3;
+                        sumR += rgb[source];
+                        sumG += rgb[source + 1];
+                        sumB += rgb[source + 2];
+                        sumLuma += luminance[index];
+                        pixelCount++;
+
+                        EdgeSample edge = edges[index];
+                        if (edge.Magnitude <= EdgeThreshold * 0.55)
+                            continue;
+
+                        strongEdgeCount++;
+                        edgeMagnitudeSum += edge.Magnitude;
+                        edgeGxSum += edge.Gx;
+                        edgeGySum += edge.Gy;
+                        maxMagnitude = Math.Max(maxMagnitude, edge.Magnitude);
+                    }
+                }
+
+                if (pixelCount == 0)
+                    continue;
+
+                double meanStrongEdge = strongEdgeCount == 0 ? 0 : edgeMagnitudeSum / strongEdgeCount;
+                double coherence = edgeMagnitudeSum <= 0
+                    ? 0
+                    : Math.Clamp(Math.Sqrt(edgeGxSum * edgeGxSum + edgeGySum * edgeGySum) / edgeMagnitudeSum, 0.0, 1.0);
+                double occupancy = strongEdgeCount / (double)pixelCount;
+
+                // Real contours tend to be both strong and directionally coherent. Random texture
+                // can have a large Sobel response too, but its directions cancel and therefore
+                // receive a much smaller score here.
+                double edgeScore = (maxMagnitude * 0.58 + meanStrongEdge * 0.42)
+                    * (0.38 + coherence * 0.62)
+                    * Math.Clamp(occupancy * 2.4, 0.45, 1.0);
+
+                cells[cellY * columns + cellX] = new CellAnalysis(
+                    ToByte(sumR / pixelCount),
+                    ToByte(sumG / pixelCount),
+                    ToByte(sumB / pixelCount),
+                    sumLuma / pixelCount,
+                    Math.Clamp(edgeScore, 0.0, 1.0));
+            }
+        }
+
+        return new FrameAnalysis(cells);
+    }
+
+    private static double[] GaussianBlur3x3(double[] source, int width, int height)
+    {
+        var result = new double[source.Length];
+        if (width < 3 || height < 3)
+        {
+            Array.Copy(source, result, source.Length);
+            return result;
+        }
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                double sum = 0;
+                double weightSum = 0;
+
+                for (int ky = -1; ky <= 1; ky++)
+                {
+                    int sy = Math.Clamp(y + ky, 0, height - 1);
+                    double wy = ky == 0 ? 2.0 : 1.0;
+                    for (int kx = -1; kx <= 1; kx++)
+                    {
+                        int sx = Math.Clamp(x + kx, 0, width - 1);
+                        double wx = kx == 0 ? 2.0 : 1.0;
+                        double weight = wx * wy;
+                        sum += source[sy * width + sx] * weight;
+                        weightSum += weight;
+                    }
+                }
+
+                result[y * width + x] = sum / weightSum;
+            }
         }
 
         return result;
     }
 
-    private static EdgeInfo GetEdge(double[] luminance, int columns, int rows, int x, int y)
+    private static EdgeSample[] BuildEdgeMap(double[] luminance, int width, int height)
     {
-        if (x == 0 || y == 0 || x == columns - 1 || y == rows - 1)
-            return default;
+        var result = new EdgeSample[luminance.Length];
+        if (width < 3 || height < 3)
+            return result;
 
-        double tl = luminance[(y - 1) * columns + x - 1];
-        double tc = luminance[(y - 1) * columns + x];
-        double tr = luminance[(y - 1) * columns + x + 1];
-        double ml = luminance[y * columns + x - 1];
-        double mr = luminance[y * columns + x + 1];
-        double bl = luminance[(y + 1) * columns + x - 1];
-        double bc = luminance[(y + 1) * columns + x];
-        double br = luminance[(y + 1) * columns + x + 1];
+        for (int y = 1; y < height - 1; y++)
+        {
+            for (int x = 1; x < width - 1; x++)
+            {
+                double tl = luminance[(y - 1) * width + x - 1];
+                double tc = luminance[(y - 1) * width + x];
+                double tr = luminance[(y - 1) * width + x + 1];
+                double ml = luminance[y * width + x - 1];
+                double mr = luminance[y * width + x + 1];
+                double bl = luminance[(y + 1) * width + x - 1];
+                double bc = luminance[(y + 1) * width + x];
+                double br = luminance[(y + 1) * width + x + 1];
 
-        double gx = -tl + tr - (2 * ml) + (2 * mr) - bl + br;
-        double gy = -tl - (2 * tc) - tr + bl + (2 * bc) + br;
-        double magnitude = Math.Sqrt(gx * gx + gy * gy) / 4.0;
+                double gx = (-tl + tr - 2.0 * ml + 2.0 * mr - bl + br) / 4.0;
+                double gy = (-tl - 2.0 * tc - tr + bl + 2.0 * bc + br) / 4.0;
+                double magnitude = Math.Clamp(Math.Sqrt(gx * gx + gy * gy), 0.0, 1.0);
+                result[y * width + x] = new EdgeSample(magnitude, gx, gy);
+            }
+        }
 
-        return new EdgeInfo(Math.Clamp(magnitude, 0.0, 1.0), gx, gy);
+        return result;
     }
 
-    private static char GetGlyph(double sourceLuminance, EdgeInfo edge, double edgeStrength)
+    private static char GetGlyph(double sourceLuminance, double edgeAmount)
     {
-        double edgeAmount = GetEdgeAmount(edge.Magnitude, edgeStrength);
-
-        // Strong contours get directional glyphs. This makes silhouettes, facial outlines,
-        // eyes, mouths and object boundaries survive the aggressive ASCII down-sampling.
-        if (edgeAmount >= 0.42)
-            return GetDirectionalEdgeGlyph(edge.Gx, edge.Gy);
-
-        double displayLuminance = Math.Clamp(
-            Math.Pow(sourceLuminance, 0.72) + edgeAmount * 0.48,
-            0.0,
-            1.0);
-
+        double displayLuminance = GetDisplayLuminance(sourceLuminance, edgeAmount);
         int rampIndex = (int)Math.Round(displayLuminance * (Ramp.Length - 1));
         rampIndex = Math.Clamp(rampIndex, 0, Ramp.Length - 1);
         return Ramp[rampIndex];
     }
 
-    private static double GetEdgeAmount(double magnitude, double edgeStrength)
+    private static double GetDisplayLuminance(double sourceLuminance, double edgeAmount) =>
+        Math.Clamp(Math.Pow(sourceLuminance, 0.72) + edgeAmount * 0.24, 0.0, 1.0);
+
+    private static double GetEdgeAmount(double edgeScore, double edgeStrength)
     {
-        if (edgeStrength <= 0 || magnitude <= EdgeThreshold)
+        if (edgeStrength <= 0 || edgeScore <= EdgeThreshold)
             return 0;
 
-        double normalized = Math.Clamp((magnitude - EdgeThreshold) / EdgeRange, 0.0, 1.0);
+        double normalized = Math.Clamp((edgeScore - EdgeThreshold) / EdgeRange, 0.0, 1.0);
         return Math.Clamp(normalized * edgeStrength, 0.0, 1.0);
-    }
-
-    private static char GetDirectionalEdgeGlyph(double gx, double gy)
-    {
-        double absX = Math.Abs(gx);
-        double absY = Math.Abs(gy);
-
-        // Sobel gradient points across the edge, so the visible edge is perpendicular to it.
-        if (absX > absY * 1.6)
-            return '|';
-        if (absY > absX * 1.6)
-            return '-';
-
-        return gx * gy >= 0 ? '/' : '\\';
     }
 
     private static double GetSourceLuminance(byte r, byte g, byte b) =>
@@ -278,5 +391,10 @@ public sealed class AsciiRenderer
         return mask;
     }
 
-    private readonly record struct EdgeInfo(double Magnitude, double Gx, double Gy);
+    private readonly record struct EdgeSample(double Magnitude, double Gx, double Gy);
+    private readonly record struct CellAnalysis(byte R, byte G, byte B, double Luminance, double EdgeScore);
+    private readonly record struct FrameAnalysis(CellAnalysis[] Cells)
+    {
+        public static FrameAnalysis Empty { get; } = new(Array.Empty<CellAnalysis>());
+    }
 }
