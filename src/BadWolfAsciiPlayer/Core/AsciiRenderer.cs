@@ -9,8 +9,13 @@ public sealed class AsciiRenderer
     public const int CellWidth = 6;
     public const int CellHeight = 10;
 
-    private const string Ramp = " .:-=+*#%@";
+    // Ordered from the least to the most ink coverage.  Starting with a dot
+    // instead of a space keeps dark-but-visible picture detail from vanishing.
+    private const string Ramp = ".:-=+*#%@";
+    private const double TargetGlyphCoverage = 0.58;
+
     private readonly Dictionary<char, byte[]> _glyphMasks = new();
+    private readonly Dictionary<char, double> _glyphCoverage = new();
     private WriteableBitmap? _bitmap;
     private int _columns;
     private int _rows;
@@ -18,7 +23,11 @@ public sealed class AsciiRenderer
     public AsciiRenderer()
     {
         foreach (char c in Ramp)
-            _glyphMasks[c] = CreateGlyphMask(c);
+        {
+            byte[] mask = CreateGlyphMask(c);
+            _glyphMasks[c] = mask;
+            _glyphCoverage[c] = Math.Max(0.08, mask.Average(value => value / 255.0));
+        }
     }
 
     public WriteableBitmap EnsureBitmap(int columns, int rows)
@@ -51,7 +60,6 @@ public sealed class AsciiRenderer
             byte* basePtr = (byte*)bitmap.BackBuffer.ToPointer();
             int stride = bitmap.BackBufferStride;
 
-            // Clear the previous frame.
             for (int y = 0; y < rows * CellHeight; y++)
                 new Span<byte>(basePtr + y * stride, columns * CellWidth * 4).Clear();
 
@@ -63,13 +71,43 @@ public sealed class AsciiRenderer
                     byte r = rgb[source];
                     byte g = rgb[source + 1];
                     byte b = rgb[source + 2];
-                    int luminance = (r * 54 + g * 183 + b * 19) >> 8;
-                    int rampIndex = luminance * (Ramp.Length - 1) / 255;
-                    byte[] mask = _glyphMasks[Ramp[rampIndex]];
 
-                    byte fgR = mode == AsciiMode.Mono ? (byte)235 : r;
-                    byte fgG = mode == AsciiMode.Mono ? (byte)235 : g;
-                    byte fgB = mode == AsciiMode.Mono ? (byte)235 : b;
+                    double sourceLuminance = (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255.0;
+
+                    // Human vision and display gamma make a direct linear mapping look much
+                    // darker when only a fraction of each ASCII cell contains foreground ink.
+                    // Lift mid-tones before selecting the glyph, then compensate the foreground
+                    // intensity for that glyph's measured ink coverage.
+                    double displayLuminance = Math.Pow(sourceLuminance, 0.72);
+                    int rampIndex = (int)Math.Round(displayLuminance * (Ramp.Length - 1));
+                    rampIndex = Math.Clamp(rampIndex, 0, Ramp.Length - 1);
+
+                    char glyph = Ramp[rampIndex];
+                    byte[] mask = _glyphMasks[glyph];
+                    double coverage = _glyphCoverage[glyph];
+                    double coverageGain = Math.Clamp(TargetGlyphCoverage / coverage, 1.0, 3.2);
+                    double brightnessGain = Math.Clamp(1.12 * coverageGain, 1.12, 3.4);
+
+                    byte fgR;
+                    byte fgG;
+                    byte fgB;
+                    if (mode == AsciiMode.Mono)
+                    {
+                        byte mono = ToByte(255.0 * Math.Clamp(displayLuminance * brightnessGain, 0.0, 1.0));
+                        fgR = mono;
+                        fgG = mono;
+                        fgB = mono;
+                    }
+                    else
+                    {
+                        // Preserve hue while recovering the luminance lost to the black area
+                        // surrounding each glyph.  A small floor keeps saturated dark colours
+                        // visible without turning true blacks grey.
+                        double colorGain = sourceLuminance < 0.015 ? 1.0 : brightnessGain;
+                        fgR = ToByte(r * colorGain);
+                        fgG = ToByte(g * colorGain);
+                        fgB = ToByte(b * colorGain);
+                    }
 
                     int originX = cellX * CellWidth;
                     int originY = cellY * CellHeight;
@@ -99,11 +137,10 @@ public sealed class AsciiRenderer
         }
     }
 
+    private static byte ToByte(double value) => (byte)Math.Clamp((int)Math.Round(value), 0, 255);
+
     private static byte[] CreateGlyphMask(char c)
     {
-        if (c == ' ')
-            return new byte[CellWidth * CellHeight];
-
         var visual = new DrawingVisual();
         using (DrawingContext dc = visual.RenderOpen())
         {
@@ -129,7 +166,6 @@ public sealed class AsciiRenderer
         byte[] mask = new byte[CellWidth * CellHeight];
         for (int i = 0; i < mask.Length; i++)
         {
-            // Pbgra alpha is ideal here; fall back to luminance if font rendering reports full alpha.
             byte alpha = pixels[i * 4 + 3];
             byte luminance = Math.Max(pixels[i * 4], Math.Max(pixels[i * 4 + 1], pixels[i * 4 + 2]));
             mask[i] = Math.Max(alpha, luminance);
