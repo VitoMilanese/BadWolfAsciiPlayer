@@ -49,17 +49,17 @@ Then either:
 
 When text is selected in **Selectable text** mode, the displayed text is temporarily kept stable so the selection is not lost while playback continues.
 
-Edge enhancement is calculated before the final ASCII downsampling. FFmpeg supplies a 3x denser RGB frame and the renderer uses a Canny-style pipeline: 5x5 Gaussian smoothing, Scharr gradients, non-maximum suppression, and hysteresis thresholding. The edge response is color-aware as well as luminance-aware, so boundaries with similar brightness but different color can still survive. Confirmed contours increase glyph density and brightness instead of being replaced by directional slash characters.
+Edge enhancement is calculated before the final ASCII downsampling. FFmpeg supplies a 3x denser RGB frame and the renderer uses a Canny-style pipeline: 5x5 Gaussian smoothing, Scharr gradients, non-maximum suppression, and adaptive hysteresis thresholding. The edge response is color-aware as well as luminance-aware, so boundaries with similar brightness but different color can still survive. Confirmed contours increase glyph density and brightness instead of being replaced by directional slash characters.
 
 ## How it works
 
 Bitmap video path:
 
-`FFmpeg -> 3x RGB24 analysis frame -> Gaussian blur -> luminance/chroma Scharr gradients -> non-maximum suppression -> hysteresis -> ASCII renderer -> WPF WriteableBitmap`
+`FFmpeg -> 3x RGB24 analysis frame -> Gaussian blur -> luminance/chroma Scharr gradients -> non-maximum suppression -> adaptive hysteresis -> ASCII renderer -> WPF WriteableBitmap`
 
 Selectable-text video path:
 
-`FFmpeg -> 3x RGB24 analysis frame -> Gaussian blur -> luminance/chroma Scharr gradients -> non-maximum suppression -> hysteresis -> glyph conversion -> read-only WPF TextBox`
+`FFmpeg -> 3x RGB24 analysis frame -> Gaussian blur -> luminance/chroma Scharr gradients -> non-maximum suppression -> adaptive hysteresis -> glyph conversion -> read-only WPF TextBox`
 
 Audio path:
 
