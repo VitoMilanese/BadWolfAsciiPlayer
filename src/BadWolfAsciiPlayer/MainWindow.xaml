@@ -26,7 +26,7 @@
             <Setter Property="Background" Value="#262626"/>
             <Setter Property="Padding" Value="8,5"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Template Property="Template">
+            <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBoxItem">
                         <Border x:Name="ItemBorder"
