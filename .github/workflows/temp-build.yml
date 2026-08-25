@@ -15,3 +15,4 @@ jobs:
           dotnet-version: '8.0.x'
       - run: dotnet restore BadWolfAsciiPlayer.sln
       - run: dotnet build BadWolfAsciiPlayer.sln --configuration Release --no-restore
+      # Temporary workflow: remove after verification.
