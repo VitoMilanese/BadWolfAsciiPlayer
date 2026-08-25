@@ -232,7 +232,7 @@ public partial class MainWindow : Window
 
         if (selectable && _lastFrame is not null)
         {
-            _lastAsciiText = _renderer.RenderText(_lastFrame, _lastFrameColumns, _lastFrameRows);
+            _lastAsciiText = _renderer.RenderText(_lastFrame, _lastFrameColumns, _lastFrameRows, GetEdgeStrength());
             SelectableAsciiText.Text = _lastAsciiText;
         }
     }
@@ -243,7 +243,7 @@ public partial class MainWindow : Window
             return;
 
         if (string.IsNullOrEmpty(_lastAsciiText))
-            _lastAsciiText = _renderer.RenderText(_lastFrame, _lastFrameColumns, _lastFrameRows);
+            _lastAsciiText = _renderer.RenderText(_lastFrame, _lastFrameColumns, _lastFrameRows, GetEdgeStrength());
 
         try
         {
@@ -270,6 +270,7 @@ public partial class MainWindow : Window
         _decoderCts = new CancellationTokenSource();
         CancellationToken token = _decoderCts.Token;
         AsciiMode mode = GetMode();
+        double edgeStrength = GetEdgeStrength();
         string filePath = _filePath;
 
         AsciiImage.Source = _renderer.EnsureBitmap(columns, rows);
@@ -324,17 +325,15 @@ public partial class MainWindow : Window
 
                         if (IsSelectableTextMode())
                         {
-                            // Keep the currently selected text stable so it can actually be copied
-                            // while video playback continues behind the selection.
                             if (SelectableAsciiText.SelectionLength == 0)
                             {
-                                _lastAsciiText = _renderer.RenderText(frame, columns, rows);
+                                _lastAsciiText = _renderer.RenderText(frame, columns, rows, edgeStrength);
                                 SelectableAsciiText.Text = _lastAsciiText;
                             }
                         }
                         else
                         {
-                            _renderer.Render(frame, columns, rows, mode);
+                            _renderer.Render(frame, columns, rows, mode, edgeStrength);
                         }
                     }, DispatcherPriority.Render, token);
 
@@ -393,6 +392,20 @@ public partial class MainWindow : Window
     {
         return DisplayCombo.SelectedItem is ComboBoxItem item
             && string.Equals(item.Content?.ToString(), "Selectable text", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private double GetEdgeStrength()
+    {
+        if (EdgeCombo.SelectedItem is not ComboBoxItem item)
+            return 1.0;
+
+        return item.Content?.ToString() switch
+        {
+            "Off" => 0.0,
+            "Low" => 0.6,
+            "High" => 1.5,
+            _ => 1.0
+        };
     }
 
     private AsciiMode GetMode()

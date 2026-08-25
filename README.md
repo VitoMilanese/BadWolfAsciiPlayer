@@ -43,20 +43,23 @@ Then either:
 - Bitmap or selectable-text display mode
 - Select and copy ASCII characters directly with the mouse and `Ctrl+C`
 - **Copy frame** to copy the complete current frame as plain ASCII text
+- Edge enhancement: **Off / Low / Medium / High**
 - 80 / 120 / 160 / 200 / 240 columns
 - 15 / 24 / 30 / 60 ASCII FPS
 
 When text is selected in **Selectable text** mode, the displayed text is temporarily kept stable so the selection is not lost while playback continues.
 
+Edge enhancement uses a Sobel luminance gradient on the already downscaled ASCII grid. Strong contours are emphasized and, when appropriate, rendered with directional `-`, `|`, `/`, and `\\` glyphs so faces and object boundaries remain easier to recognize against similarly bright backgrounds.
+
 ## How it works
 
 Bitmap video path:
 
-`FFmpeg -> scaled RGB24 frames -> ASCII renderer -> WPF WriteableBitmap`
+`FFmpeg -> scaled RGB24 frames -> luminance + Sobel edge analysis -> ASCII renderer -> WPF WriteableBitmap`
 
 Selectable-text video path:
 
-`FFmpeg -> scaled RGB24 frames -> luminance-to-glyph conversion -> read-only WPF TextBox`
+`FFmpeg -> scaled RGB24 frames -> luminance + Sobel edge analysis -> glyph conversion -> read-only WPF TextBox`
 
 Audio path:
 

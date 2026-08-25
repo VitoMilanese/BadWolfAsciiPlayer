@@ -11,7 +11,10 @@ public sealed class AsciiRenderer
     public const int CellHeight = 10;
 
     private const string Ramp = ".:-=+*#%@";
+    private const string EdgeGlyphs = "-|/\\";
     private const double TargetGlyphCoverage = 0.58;
+    private const double EdgeThreshold = 0.055;
+    private const double EdgeRange = 0.32;
 
     private readonly Dictionary<char, byte[]> _glyphMasks = new();
     private readonly Dictionary<char, double> _glyphCoverage = new();
@@ -21,7 +24,7 @@ public sealed class AsciiRenderer
 
     public AsciiRenderer()
     {
-        foreach (char c in Ramp)
+        foreach (char c in Ramp.Concat(EdgeGlyphs).Distinct())
         {
             byte[] mask = CreateGlyphMask(c);
             _glyphMasks[c] = mask;
@@ -47,18 +50,20 @@ public sealed class AsciiRenderer
         return _bitmap;
     }
 
-    public string RenderText(byte[] rgb, int columns, int rows)
+    public string RenderText(byte[] rgb, int columns, int rows, double edgeStrength = 0)
     {
         if (rgb.Length < columns * rows * 3)
             return string.Empty;
 
+        double[] luminance = BuildLuminanceMap(rgb, columns, rows);
         var builder = new StringBuilder((columns + Environment.NewLine.Length) * rows);
+
         for (int y = 0; y < rows; y++)
         {
             for (int x = 0; x < columns; x++)
             {
-                int source = (y * columns + x) * 3;
-                builder.Append(GetGlyph(rgb[source], rgb[source + 1], rgb[source + 2]));
+                EdgeInfo edge = GetEdge(luminance, columns, rows, x, y);
+                builder.Append(GetGlyph(luminance[y * columns + x], edge, edgeStrength));
             }
 
             if (y < rows - 1)
@@ -68,11 +73,13 @@ public sealed class AsciiRenderer
         return builder.ToString();
     }
 
-    public unsafe void Render(byte[] rgb, int columns, int rows, AsciiMode mode)
+    public unsafe void Render(byte[] rgb, int columns, int rows, AsciiMode mode, double edgeStrength = 0)
     {
         WriteableBitmap bitmap = EnsureBitmap(columns, rows);
         if (rgb.Length < columns * rows * 3)
             return;
+
+        double[] luminance = BuildLuminanceMap(rgb, columns, rows);
 
         bitmap.Lock();
         try
@@ -87,18 +94,28 @@ public sealed class AsciiRenderer
             {
                 for (int cellX = 0; cellX < columns; cellX++)
                 {
-                    int source = (cellY * columns + cellX) * 3;
+                    int cellIndex = cellY * columns + cellX;
+                    int source = cellIndex * 3;
                     byte r = rgb[source];
                     byte g = rgb[source + 1];
                     byte b = rgb[source + 2];
 
-                    double sourceLuminance = GetSourceLuminance(r, g, b);
-                    double displayLuminance = Math.Pow(sourceLuminance, 0.72);
-                    char glyph = GetGlyphFromDisplayLuminance(displayLuminance);
+                    double sourceLuminance = luminance[cellIndex];
+                    EdgeInfo edge = GetEdge(luminance, columns, rows, cellX, cellY);
+                    double edgeAmount = GetEdgeAmount(edge.Magnitude, edgeStrength);
+                    double displayLuminance = Math.Clamp(
+                        Math.Pow(sourceLuminance, 0.72) + edgeAmount * 0.48,
+                        0.0,
+                        1.0);
+
+                    char glyph = GetGlyph(sourceLuminance, edge, edgeStrength);
                     byte[] mask = _glyphMasks[glyph];
                     double coverage = _glyphCoverage[glyph];
                     double coverageGain = Math.Clamp(TargetGlyphCoverage / coverage, 1.0, 3.2);
-                    double brightnessGain = Math.Clamp(1.12 * coverageGain, 1.12, 3.4);
+                    double brightnessGain = Math.Clamp(
+                        1.12 * coverageGain * (1.0 + edgeAmount * 0.75),
+                        1.12,
+                        4.0);
 
                     byte fgR;
                     byte fgG;
@@ -146,17 +163,79 @@ public sealed class AsciiRenderer
         }
     }
 
-    private static char GetGlyph(byte r, byte g, byte b)
+    private static double[] BuildLuminanceMap(byte[] rgb, int columns, int rows)
     {
-        double displayLuminance = Math.Pow(GetSourceLuminance(r, g, b), 0.72);
-        return GetGlyphFromDisplayLuminance(displayLuminance);
+        var result = new double[columns * rows];
+        for (int i = 0; i < result.Length; i++)
+        {
+            int source = i * 3;
+            result[i] = GetSourceLuminance(rgb[source], rgb[source + 1], rgb[source + 2]);
+        }
+
+        return result;
     }
 
-    private static char GetGlyphFromDisplayLuminance(double displayLuminance)
+    private static EdgeInfo GetEdge(double[] luminance, int columns, int rows, int x, int y)
     {
+        if (x == 0 || y == 0 || x == columns - 1 || y == rows - 1)
+            return default;
+
+        double tl = luminance[(y - 1) * columns + x - 1];
+        double tc = luminance[(y - 1) * columns + x];
+        double tr = luminance[(y - 1) * columns + x + 1];
+        double ml = luminance[y * columns + x - 1];
+        double mr = luminance[y * columns + x + 1];
+        double bl = luminance[(y + 1) * columns + x - 1];
+        double bc = luminance[(y + 1) * columns + x];
+        double br = luminance[(y + 1) * columns + x + 1];
+
+        double gx = -tl + tr - (2 * ml) + (2 * mr) - bl + br;
+        double gy = -tl - (2 * tc) - tr + bl + (2 * bc) + br;
+        double magnitude = Math.Sqrt(gx * gx + gy * gy) / 4.0;
+
+        return new EdgeInfo(Math.Clamp(magnitude, 0.0, 1.0), gx, gy);
+    }
+
+    private static char GetGlyph(double sourceLuminance, EdgeInfo edge, double edgeStrength)
+    {
+        double edgeAmount = GetEdgeAmount(edge.Magnitude, edgeStrength);
+
+        // Strong contours get directional glyphs. This makes silhouettes, facial outlines,
+        // eyes, mouths and object boundaries survive the aggressive ASCII down-sampling.
+        if (edgeAmount >= 0.42)
+            return GetDirectionalEdgeGlyph(edge.Gx, edge.Gy);
+
+        double displayLuminance = Math.Clamp(
+            Math.Pow(sourceLuminance, 0.72) + edgeAmount * 0.48,
+            0.0,
+            1.0);
+
         int rampIndex = (int)Math.Round(displayLuminance * (Ramp.Length - 1));
         rampIndex = Math.Clamp(rampIndex, 0, Ramp.Length - 1);
         return Ramp[rampIndex];
+    }
+
+    private static double GetEdgeAmount(double magnitude, double edgeStrength)
+    {
+        if (edgeStrength <= 0 || magnitude <= EdgeThreshold)
+            return 0;
+
+        double normalized = Math.Clamp((magnitude - EdgeThreshold) / EdgeRange, 0.0, 1.0);
+        return Math.Clamp(normalized * edgeStrength, 0.0, 1.0);
+    }
+
+    private static char GetDirectionalEdgeGlyph(double gx, double gy)
+    {
+        double absX = Math.Abs(gx);
+        double absY = Math.Abs(gy);
+
+        // Sobel gradient points across the edge, so the visible edge is perpendicular to it.
+        if (absX > absY * 1.6)
+            return '|';
+        if (absY > absX * 1.6)
+            return '-';
+
+        return gx * gy >= 0 ? '/' : '\\';
     }
 
     private static double GetSourceLuminance(byte r, byte g, byte b) =>
@@ -198,4 +277,6 @@ public sealed class AsciiRenderer
 
         return mask;
     }
+
+    private readonly record struct EdgeInfo(double Magnitude, double Gx, double Gy);
 }
