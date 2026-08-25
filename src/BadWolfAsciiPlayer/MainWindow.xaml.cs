@@ -11,6 +11,8 @@ namespace BadWolfAsciiPlayer;
 
 public partial class MainWindow : Window
 {
+    private const int EdgeAnalysisScale = 3;
+
     private readonly FfmpegProbeService _probeService = new();
     private readonly FfmpegAudioPlayer _audioPlayer = new();
     private readonly AsciiRenderer _renderer = new();
@@ -25,6 +27,8 @@ public partial class MainWindow : Window
     private bool _handlingMediaEnd;
     private long _decoderGeneration;
     private byte[]? _lastFrame;
+    private int _lastFrameSourceWidth;
+    private int _lastFrameSourceHeight;
     private int _lastFrameColumns;
     private int _lastFrameRows;
     private string _lastAsciiText = string.Empty;
@@ -232,7 +236,13 @@ public partial class MainWindow : Window
 
         if (selectable && _lastFrame is not null)
         {
-            _lastAsciiText = _renderer.RenderText(_lastFrame, _lastFrameColumns, _lastFrameRows, GetEdgeStrength());
+            _lastAsciiText = _renderer.RenderText(
+                _lastFrame,
+                _lastFrameSourceWidth,
+                _lastFrameSourceHeight,
+                _lastFrameColumns,
+                _lastFrameRows,
+                GetEdgeStrength());
             SelectableAsciiText.Text = _lastAsciiText;
         }
     }
@@ -243,7 +253,15 @@ public partial class MainWindow : Window
             return;
 
         if (string.IsNullOrEmpty(_lastAsciiText))
-            _lastAsciiText = _renderer.RenderText(_lastFrame, _lastFrameColumns, _lastFrameRows, GetEdgeStrength());
+        {
+            _lastAsciiText = _renderer.RenderText(
+                _lastFrame,
+                _lastFrameSourceWidth,
+                _lastFrameSourceHeight,
+                _lastFrameColumns,
+                _lastFrameRows,
+                GetEdgeStrength());
+        }
 
         try
         {
@@ -266,6 +284,8 @@ public partial class MainWindow : Window
         int columns = GetComboInt(ColumnsCombo, 160);
         int fps = GetComboInt(FpsCombo, 30);
         int rows = CalculateRows(_videoInfo, columns);
+        int sourceWidth = checked(columns * EdgeAnalysisScale);
+        int sourceHeight = checked(rows * EdgeAnalysisScale);
         long generation = Interlocked.Increment(ref _decoderGeneration);
         _decoderCts = new CancellationTokenSource();
         CancellationToken token = _decoderCts.Token;
@@ -279,7 +299,12 @@ public partial class MainWindow : Window
         {
             try
             {
-                await using FfmpegFrameReader reader = FfmpegFrameReader.Start(filePath, startAt, columns, rows, fps);
+                await using FfmpegFrameReader reader = FfmpegFrameReader.Start(
+                    filePath,
+                    startAt,
+                    sourceWidth,
+                    sourceHeight,
+                    fps);
                 long frameIndex = 0;
                 double frameDuration = 1.0 / fps;
 
@@ -318,6 +343,8 @@ public partial class MainWindow : Window
                             return;
 
                         _lastFrame = frame;
+                        _lastFrameSourceWidth = sourceWidth;
+                        _lastFrameSourceHeight = sourceHeight;
                         _lastFrameColumns = columns;
                         _lastFrameRows = rows;
                         _lastAsciiText = string.Empty;
@@ -327,13 +354,26 @@ public partial class MainWindow : Window
                         {
                             if (SelectableAsciiText.SelectionLength == 0)
                             {
-                                _lastAsciiText = _renderer.RenderText(frame, columns, rows, edgeStrength);
+                                _lastAsciiText = _renderer.RenderText(
+                                    frame,
+                                    sourceWidth,
+                                    sourceHeight,
+                                    columns,
+                                    rows,
+                                    edgeStrength);
                                 SelectableAsciiText.Text = _lastAsciiText;
                             }
                         }
                         else
                         {
-                            _renderer.Render(frame, columns, rows, mode, edgeStrength);
+                            _renderer.Render(
+                                frame,
+                                sourceWidth,
+                                sourceHeight,
+                                columns,
+                                rows,
+                                mode,
+                                edgeStrength);
                         }
                     }, DispatcherPriority.Render, token);
 
@@ -402,9 +442,9 @@ public partial class MainWindow : Window
         return item.Content?.ToString() switch
         {
             "Off" => 0.0,
-            "Low" => 0.6,
-            "High" => 1.5,
-            _ => 1.0
+            "Low" => 0.55,
+            "High" => 1.35,
+            _ => 0.9
         };
     }
 
