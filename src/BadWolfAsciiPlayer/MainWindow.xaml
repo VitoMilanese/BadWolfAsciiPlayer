@@ -20,7 +20,6 @@
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="Margin" Value="3"/>
         </Style>
-
         <Style TargetType="ComboBoxItem">
             <Setter Property="Foreground" Value="#F2F2F2"/>
             <Setter Property="Background" Value="#262626"/>
@@ -41,7 +40,6 @@
                 </Setter.Value>
             </Setter>
         </Style>
-
         <Style TargetType="ComboBox">
             <Setter Property="Background" Value="#262626"/>
             <Setter Property="Foreground" Value="#F2F2F2"/>
@@ -88,7 +86,6 @@
             <TextBlock x:Name="FileNameText" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#BEBEBE" Text="Drop an MP4/MKV/AVI/MOV here, or click Open video"/>
             <TextBlock x:Name="StatusText" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="#E17878" Margin="12,0,0,0"/>
         </DockPanel>
-
         <Border Grid.Row="1" BorderBrush="#333333" BorderThickness="1" Background="Black" CornerRadius="4" ClipToBounds="True">
             <Grid>
                 <Image x:Name="AsciiImage" Stretch="Uniform" SnapsToDevicePixels="True" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
@@ -98,7 +95,6 @@
                 <TextBlock x:Name="DropHint" Text="DROP VIDEO HERE" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="32" FontWeight="SemiBold" Foreground="#3D3D3D" IsHitTestVisible="False"/>
             </Grid>
         </Border>
-
         <Grid Grid.Row="2" Margin="0,10,0,4">
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <Button x:Name="PlayPauseButton" Grid.Column="0" Width="80" Click="PlayPause_Click" IsEnabled="False">Play</Button>
@@ -106,26 +102,21 @@
             <Slider x:Name="SeekSlider" Grid.Column="2" Minimum="0" Maximum="1" Value="0" IsEnabled="False" PreviewMouseDown="SeekSlider_PreviewMouseDown" PreviewMouseUp="SeekSlider_PreviewMouseUp"/>
             <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="Vol" VerticalAlignment="Center"/><Slider x:Name="VolumeSlider" Width="90" Minimum="0" Maximum="1" Value="0.8" ValueChanged="VolumeSlider_ValueChanged"/></StackPanel>
         </Grid>
-
         <WrapPanel Grid.Row="3" HorizontalAlignment="Center" VerticalAlignment="Center">
             <TextBlock Text="Display" VerticalAlignment="Center" Margin="6,0,2,0"/>
             <ComboBox x:Name="DisplayCombo" Width="145" SelectionChanged="DisplayMode_Changed"><ComboBoxItem Content="Bitmap" IsSelected="True"/><ComboBoxItem Content="Selectable text"/></ComboBox>
             <Button x:Name="CopyFrameButton" Click="CopyFrame_Click" IsEnabled="False" Padding="10,4">Copy frame</Button>
-
             <TextBlock Text="Mode" VerticalAlignment="Center" Margin="12,0,2,0"/>
             <ComboBox x:Name="ModeCombo" Width="110" SelectionChanged="RenderSetting_Changed"><ComboBoxItem Content="Color" IsSelected="True"/><ComboBoxItem Content="Mono"/></ComboBox>
-
-            <TextBlock Text="Edges" VerticalAlignment="Center" Margin="12,0,2,0"/>
-            <ComboBox x:Name="EdgeCombo" Width="105" SelectionChanged="RenderSetting_Changed">
+            <TextBlock Text="Edges" VerticalAlignment="Center" Margin="12,0,2,0" ToolTip="Color-aware contour enhancement"/>
+            <ComboBox x:Name="EdgeCombo" Width="105" SelectionChanged="RenderSetting_Changed" ToolTip="Color-aware Canny contour enhancement">
                 <ComboBoxItem Content="Off"/>
                 <ComboBoxItem Content="Low"/>
                 <ComboBoxItem Content="Medium" IsSelected="True"/>
                 <ComboBoxItem Content="High"/>
             </ComboBox>
-
             <TextBlock Text="Columns" VerticalAlignment="Center" Margin="12,0,2,0"/>
             <ComboBox x:Name="ColumnsCombo" Width="90" SelectionChanged="RenderSetting_Changed"><ComboBoxItem Content="80"/><ComboBoxItem Content="120"/><ComboBoxItem Content="160" IsSelected="True"/><ComboBoxItem Content="200"/><ComboBoxItem Content="240"/></ComboBox>
-
             <TextBlock Text="FPS" VerticalAlignment="Center" Margin="12,0,2,0"/>
             <ComboBox x:Name="FpsCombo" Width="80" SelectionChanged="RenderSetting_Changed"><ComboBoxItem Content="15"/><ComboBoxItem Content="24"/><ComboBoxItem Content="30" IsSelected="True"/><ComboBoxItem Content="60"/></ComboBox>
         </WrapPanel>
