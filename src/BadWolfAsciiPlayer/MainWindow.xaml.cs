@@ -437,14 +437,14 @@ public partial class MainWindow : Window
     private double GetEdgeStrength()
     {
         if (EdgeCombo.SelectedItem is not ComboBoxItem item)
-            return 1.0;
+            return 0.9;
 
         return item.Content?.ToString() switch
         {
             "Off" => 0.0,
-            "Low" => 0.55,
-            "High" => 1.35,
-            _ => 0.9
+            "Low" => 0.45,
+            "High" => 1.2,
+            _ => 0.8
         };
     }
 
